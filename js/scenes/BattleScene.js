@@ -401,63 +401,137 @@ export class BattleScene extends Phaser.Scene {
     this.battleUI.setVisible(false);
   }
 
-  setFrame(sprite, frame) {
-    if (!frame) return;
+  
+setFrame(sprite, frame) {
+  if (!frame) return;
 
-    const sourceKey =
-      sprite === this.attackerSprite
-        ? "char1"
-        : "char2";
+  const sourceKey =
+    sprite === this.attackerSprite
+      ? "char1"
+      : "char2";
 
-    const source = this.textures
-      .get(sourceKey)
-      .getSourceImage();
+  const source = this.textures
+    .get(sourceKey)
+    .getSourceImage();
 
-    const textureKey = [
-      "frame",
-      sourceKey,
+  const textureKey = [
+    "frame",
+    sourceKey,
+    frame.x,
+    frame.y,
+    frame.w,
+    frame.h
+  ].join("_");
+
+  if (!this.textures.exists(textureKey)) {
+    const canvas = document.createElement("canvas");
+
+    canvas.width = frame.w;
+    canvas.height = frame.h;
+
+    const ctx = canvas.getContext("2d", {
+      willReadFrequently: true
+    });
+
+    ctx.drawImage(
+      source,
       frame.x,
       frame.y,
       frame.w,
+      frame.h,
+      0,
+      0,
+      frame.w,
       frame.h
-    ].join("_");
+    );
 
-    if (!this.textures.exists(textureKey)) {
-      const canvas = document.createElement("canvas");
+    // Lấy dữ liệu pixel
+    const imageData = ctx.getImageData(
+      0, 0, frame.w, frame.h
+    );
 
-      canvas.width = frame.w;
-      canvas.height = frame.h;
+    const data = imageData.data;
+    const w = frame.w;
+    const h = frame.h;
 
-      const ctx = canvas.getContext("2d");
+    const visited = new Uint8Array(w * h);
+    const queue = new Int32Array(w * h);
 
-      ctx.drawImage(
-        source,
-        frame.x,
-        frame.y,
-        frame.w,
-        frame.h,
-        0,
-        0,
-        frame.w,
-        frame.h
-      );
+    let head = 0;
+    let tail = 0;
 
-      this.textures.addCanvas(
-        textureKey,
-        canvas
+    // Nhận diện pixel trắng hoặc gần trắng
+    function isWhite(index) {
+      const p = index * 4;
+
+      return (
+        data[p] >= 232 &&
+        data[p + 1] >= 232 &&
+        data[p + 2] >= 232
       );
     }
 
-    sprite.setTexture(textureKey);
-    sprite.setOrigin(0.5, 1);
+    // Đưa pixel trắng ở mép vào hàng đợi
+    function addPixel(index) {
+      if (
+        index < 0 ||
+        index >= w * h ||
+        visited[index]
+      ) return;
 
-    const scale = Math.min(
-      125 / frame.w,
-      155 / frame.h
+      visited[index] = 1;
+
+      if (isWhite(index)) {
+        queue[tail++] = index;
+      }
+    }
+
+    // Kiểm tra toàn bộ viền ảnh
+    for (let x = 0; x < w; x++) {
+      addPixel(x);
+      addPixel((h - 1) * w + x);
+    }
+
+    for (let y = 0; y < h; y++) {
+      addPixel(y * w);
+      addPixel(y * w + w - 1);
+    }
+
+    // Flood fill: chỉ xóa vùng trắng nối với mép
+    while (head < tail) {
+      const index = queue[head++];
+
+      data[index * 4 + 3] = 0;
+
+      const x = index % w;
+      const y = Math.floor(index / w);
+
+      if (x > 0) addPixel(index - 1);
+      if (x < w - 1) addPixel(index + 1);
+      if (y > 0) addPixel(index - w);
+      if (y < h - 1) addPixel(index + w);
+    }
+
+    // Ghi ảnh đã xóa nền
+    ctx.putImageData(imageData, 0, 0);
+
+    this.textures.addCanvas(
+      textureKey,
+      canvas
     );
-
-    sprite.setScale(scale);
   }
+
+  sprite.setTexture(textureKey);
+  sprite.setOrigin(0.5, 1);
+
+  const scale = Math.min(
+    125 / frame.w,
+    155 / frame.h
+  );
+
+  sprite.setScale(scale);
+}
+
 
   async playFrames(sprite, frames, delay = 100) {
     if (!frames?.length) return;
