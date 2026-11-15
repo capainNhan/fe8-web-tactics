@@ -27,16 +27,16 @@ export class BattleScene extends Phaser.Scene {
   }
 
   preload() {
-    this.load.image(
-      "char1",
-      "../assets/characters/Char1.jpg"
-    );
+  this.load.image(
+    "char1",
+    "./assets/characters/Char1.jpg"
+  );
 
-    this.load.image(
-      "char2",
-      "../assets/characters/Char2.png"
-    );
-  }
+  this.load.image(
+    "char2",
+    "./assets/characters/Char2.png"
+  );
+}
 
   create() {
     this.graphics = this.add.graphics();
