@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>FE8 Web Tactics - Character Edition</title>
+  <title>FE8 Web Tactics - Sprite Edition</title>
   <style>
     body { margin: 0; background: #1a1a2e; display: flex; flex-direction: column; align-items: center; color: #fff; font-family: monospace; padding-top: 10px; }
     #game-container { border: 2px solid #4ecca3; box-shadow: 0 4px 10px rgba(0,0,0,0.5); }
@@ -13,7 +13,7 @@
 </head>
 <body>
   <div id="game-container"></div>
-  <div id="log-box">Hệ thống sẵn sàng. Chạm vào Kiếm Sĩ (Xanh dương) để di chuyển...</div>
+  <div id="log-box">Hệ thống Sprite sẵn sàng. Chạm vào Kiếm Sĩ để di chuyển...</div>
 
   <script>
     // --- LÕI TOÁN HỌC FE8 ---
@@ -64,12 +64,12 @@
 
     const unitsData = [
       {
-        id: 'player1', name: 'Kiếm Sĩ (P1)', team: 'player', x: 1, y: 3, color: 0x3498db, borderColor: 0x2980b9,
+        id: 'player1', name: 'Kiếm Sĩ (P1)', team: 'player', x: 1, y: 3,
         hp: 24, maxHp: 24, str: 9, skl: 12, spd: 13, lck: 6, def: 5, con: 8, mov: 5,
         weapon: { name: 'Iron Sword', type: 'sword', mt: 5, hit: 90, crit: 0, wt: 5, range: 1 }
       },
       {
-        id: 'enemy1', name: 'Lính Đánh Thuê (E1)', team: 'enemy', x: 5, y: 3, color: 0xe74c3c, borderColor: 0xc0392b,
+        id: 'enemy1', name: 'Lính Đánh Thuê (E1)', team: 'enemy', x: 5, y: 3,
         hp: 26, maxHp: 26, str: 10, skl: 8, spd: 8, lck: 3, def: 6, con: 10, mov: 5,
         weapon: { name: 'Steel Blade', type: 'sword', mt: 11, hit: 70, crit: 0, wt: 12, range: 1 }
       }
@@ -87,26 +87,34 @@
     class BattleScene extends Phaser.Scene {
       constructor() { super('BattleScene'); }
 
+      preload() {
+        // Tải ảnh sprite sheet từ kho GitHub (giả lập cắt khung chuẩn GBA khoảng 32x32 hoặc 48x48 mỗi frame)
+        // Nếu ảnh sprite sheet của bạn có kích thước khác, sau này ta sẽ tinh chỉnh lại thông số frameWidth/frameHeight
+        this.load.spritesheet('char1', 'Char2.png', { frameWidth: 32, frameHeight: 32 });
+        this.load.spritesheet('char2', 'Char1.jpg', { frameWidth: 32, frameHeight: 32 });
+      }
+
       create() {
         this.graphics = this.add.graphics();
         this.drawGrid();
 
-        unitsData.forEach(u => {
-          // Tạo container trực quan phong cách thẻ bài/nhân vật GBA sắc nét
+        unitsData.forEach((u, index) => {
           const container = this.add.container(u.x * TILE_SIZE + TILE_SIZE / 2, u.y * TILE_SIZE + TILE_SIZE / 2);
           
-          const bg = this.add.rectangle(0, 0, 38, 38, u.color, 0.9);
-          bg.setStrokeStyle(2, u.borderColor);
-          
-          const label = this.add.text(0, 0, u.team === 'player' ? 'P' : 'E', { 
-            fontSize: '18px', fill: '#fff', fontStyle: 'bold', fontFamily: 'monospace' 
-          }).setOrigin(0.5);
+          // Lấy khung hình đầu tiên (frame 0) làm hình đại diện đứng yên trên bản đồ
+          const spriteKey = index === 0 ? 'char1' : 'char2';
+          const sprite = this.add.sprite(0, 0, spriteKey, 0);
+          sprite.setScale(1.2);
 
-          // Thanh HP nhỏ bên dưới nhân vật
+          if (u.team === 'enemy') {
+            sprite.setTint(0xff9999); // Ám đỏ nhẹ cho địch
+          }
+
+          // Thanh HP bên dưới
           const hpBarBg = this.add.rectangle(0, 22, 36, 4, 0x000000);
           const hpBar = this.add.rectangle(-18, 22, 36, 4, 0x2ecc71).setOrigin(0, 0.5);
 
-          container.add([bg, label, hpBarBg, hpBar]);
+          container.add([sprite, hpBarBg, hpBar]);
           u.sprite = container;
           u.hpBar = hpBar;
         });
@@ -210,7 +218,6 @@
           const finalDmg = isCrit ? stats.dmg * 3 : stats.dmg;
           def.hp = Math.max(0, def.hp - finalDmg);
           
-          // Cập nhật thanh HP
           const hpPercent = def.hp / def.maxHp;
           def.hpBar.setScale(Math.max(0, hpPercent), 1);
 
