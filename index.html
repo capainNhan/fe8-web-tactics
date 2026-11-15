@@ -87,11 +87,40 @@
     class BattleScene extends Phaser.Scene {
       constructor() { super('BattleScene'); }
 
-      preload() {
-  // Load ảnh trực tiếp từ thư mục gốc
-  this.load.image('char1.jpg', 'char2.png');
-}
+            preload() {
+        // Load đúng tên file ảnh bạn đã tải lên GitHub
+        this.load.image('char1', '1000143873.png');
+        this.load.image('char2', '1000143882.jpg');
       }
+
+      create() {
+        this.graphics = this.add.graphics();
+        this.drawGrid();
+
+        unitsData.forEach((u, index) => {
+          // Gán ảnh 1 cho Player, ảnh 2 cho Enemy
+          const spriteKey = index === 0 ? 'char1' : 'char2';
+          const sprite = this.add.sprite(u.x * TILE_SIZE + TILE_SIZE / 2, u.y * TILE_SIZE + TILE_SIZE / 2, spriteKey);
+          sprite.setScale(1.0); // Chỉnh kích thước to nhỏ tùy ý (ví dụ 0.8 hoặc 1.0)
+          
+          if (u.team === 'enemy') {
+            sprite.setTint(0xff8888);
+          } else {
+            sprite.setTint(0x88ccff);
+          }
+
+          u.sprite = sprite;
+        });
+
+        this.input.on('pointerdown', (pointer) => {
+          const gx = Math.floor(pointer.x / TILE_SIZE);
+          const gy = Math.floor(pointer.y / TILE_SIZE);
+          if (gx >= 0 && gx < GRID_SIZE && gy >= 0 && gy < GRID_SIZE) {
+            this.handleTileClick(gx, gy);
+          }
+        });
+      }
+
 
       create() {
         this.graphics = this.add.graphics();
