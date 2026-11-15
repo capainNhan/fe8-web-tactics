@@ -1,197 +1,883 @@
+
 <!DOCTYPE html>
 <html lang="vi">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>FE8 Web Tactics</title>
-  <style>
-    body { margin: 0; background: #1a1a2e; display: flex; flex-direction: column; align-items: center; color: #fff; font-family: monospace; padding-top: 10px; }
-    #game-container { border: 2px solid #4ecca3; box-shadow: 0 4px 10px rgba(0,0,0,0.5); position: relative; width: 384px; height: 384px; }
-    #battle-popup {
-      position: absolute; top: 40px; left: 10px; width: 360px; height: 220px;
-      background: rgba(15, 23, 42, 0.95); border: 3px solid #f1c40f; border-radius: 6px;
-      display: none; flex-direction: column; justify-content: space-between; padding: 10px; z-index: 100;
-    }
-    .b-header { text-align: center; font-size: 14px; font-weight: bold; color: #f1c40f; border-bottom: 1px solid #444; padding-bottom: 4px; }
-    .b-body { display: flex; justify-content: space-around; align-items: center; height: 110px; }
-    .b-box { text-align: center; width: 45%; background: #020617; border: 1px solid #334155; padding: 6px; border-radius: 4px; }
-    .b-sublog { font-size: 11px; color: #cbd5e1; background: #020617; padding: 6px; border-radius: 3px; height: 35px; }
-    #log-box { width: 380px; height: 110px; background: #0f0f1a; border: 1px solid #444; margin-top: 10px; padding: 6px; overflow-y: auto; font-size: 11px; line-height: 1.3; border-radius: 4px; }
-  </style>
-  <script src="https://cdn.jsdelivr.net/npm/phaser@3.80.1/dist/phaser.min.js"></script>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<title>FE8 Web Tactics</title>
+
+<style>
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  padding: 10px 0;
+  background: #1a1a2e;
+  color: white;
+  font-family: monospace;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+#game-container {
+  width: 384px;
+  height: 384px;
+  position: relative;
+  border: 2px solid #4ecca3;
+  box-shadow: 0 4px 15px #0008;
+}
+
+#log-box {
+  width: 384px;
+  height: 110px;
+  margin-top: 10px;
+  padding: 7px;
+  overflow-y: auto;
+  background: #0f0f1a;
+  border: 1px solid #444;
+  font-size: 11px;
+  line-height: 1.5;
+}
+</style>
+
+<script src="https://cdn.jsdelivr.net/npm/phaser@3.80.1/dist/phaser.min.js"></script>
 </head>
+
 <body>
-  <div id="game-container">
-    <div id="battle-popup">
-      <div class="b-header">GIAO TRANH CHIẾN THUẬT FE8</div>
-      <div class="b-body">
-        <div class="b-box">
-          <div id="bp-att" style="color:#38bdf8; font-weight:bold;">Kiếm Sĩ</div>
-          <div style="font-size:20px; margin:4px 0;">⚔️</div>
-          <div id="bp-att-hp" style="color:#22c55e; font-size:13px;">HP: 24/24</div>
-        </div>
-        <div style="font-weight:bold; color:#f97316;">VS</div>
-        <div class="b-box">
-          <div id="bp-def" style="color:#f87171; font-weight:bold;">Lính Thuê</div>
-          <div style="font-size:20px; margin:4px 0;">🛡️</div>
-          <div id="bp-def-hp" style="color:#22c55e; font-size:13px;">HP: 26/26</div>
-        </div>
-      </div>
-      <div class="b-sublog" id="bp-sub">Đang giao tranh...</div>
-    </div>
-  </div>
-  <div id="log-box">Chạm vào Kiếm Sĩ (Xanh) rồi bấm vào Địch cạnh bên để đánh!</div>
 
-  <script>
-    const TILE_SIZE = 48;
-    const GRID_SIZE = 8;
-    const unitsData = [
-      { id: 'p1', name: 'Kiếm Sĩ', team: 'player', x: 1, y: 3, color: 0x3498db, hp: 24, maxHp: 24, str: 9, skl: 12, spd: 13, lck: 6, def: 5, con: 8, mov: 5, weapon: { type: 'sword', mt: 5, hit: 90, crit: 0, wt: 5 } },
-      { id: 'e1', name: 'Lính Thuê', team: 'enemy', x: 5, y: 3, color: 0xe74c3c, hp: 26, maxHp: 26, str: 10, skl: 8, spd: 8, lck: 3, def: 6, con: 10, mov: 5, weapon: { type: 'sword', mt: 11, hit: 70, crit: 0, wt: 12 } }
-    ];
+<div id="game-container"></div>
+<div id="log-box">FE8 Web Tactics - Chạm Kiếm Sĩ rồi chọn địch cạnh bên để chiến đấu.</div>
 
-    let selectedUnit = null;
-    let moveTiles = [];
+<script>
+const TILE = 48;
+const GRID = 8;
 
-    function logMsg(text) {
-      const box = document.getElementById('log-box');
-      box.innerHTML += `<br>> ${text}`;
-      box.scrollTop = box.scrollHeight;
+const unitsData = [
+ {
+  id: "p1",
+  name: "Kiếm Sĩ",
+  team: "player",
+  x: 1, y: 3,
+  hp: 24, maxHp: 24,
+  str: 9, skl: 12, spd: 13,
+  lck: 6, def: 5, mov: 5,
+  weapon: { mt: 5, hit: 90 }
+ },
+ {
+  id: "e1",
+  name: "Lính Thuê",
+  team: "enemy",
+  x: 5, y: 3,
+  hp: 26, maxHp: 26,
+  str: 10, skl: 8, spd: 8,
+  lck: 3, def: 6, mov: 5,
+  weapon: { mt: 11, hit: 70 }
+ }
+];
+
+let selectedUnit = null;
+let moveTiles = [];
+let battleInProgress = false;
+
+function logMsg(message) {
+ const box = document.getElementById("log-box");
+ box.innerHTML += "<br>> " + message;
+ box.scrollTop = box.scrollHeight;
+}
+
+/* =====================================
+   SPRITE SHEET PROCESSING
+===================================== */
+
+function processSprite(scene, key, removeWhite) {
+ const source = scene.textures.get(key).getSourceImage();
+
+ const canvas = document.createElement("canvas");
+ canvas.width = source.width;
+ canvas.height = source.height;
+
+ const ctx = canvas.getContext("2d", {
+  willReadFrequently: true
+ });
+
+ ctx.drawImage(source, 0, 0);
+
+ const imageData = ctx.getImageData(
+  0, 0, canvas.width, canvas.height
+ );
+
+ const pixels = imageData.data;
+
+ if (removeWhite) {
+  for (let i = 0; i < pixels.length; i += 4) {
+   const r = pixels[i];
+   const g = pixels[i + 1];
+   const b = pixels[i + 2];
+
+   // Loại nền trắng của ảnh JPG.
+   if (r > 245 && g > 245 && b > 245) {
+    pixels[i + 3] = 0;
+   }
+  }
+
+  ctx.putImageData(imageData, 0, 0);
+ }
+
+ const processed = ctx.getImageData(
+  0, 0, canvas.width, canvas.height
+ );
+
+ scene.textures.addCanvas(key + "_clean", canvas);
+
+ return {
+  width: canvas.width,
+  height: canvas.height,
+  pixels: processed.data
+ };
+}
+
+/* =====================================
+   AUTOMATIC FRAME DETECTION
+
+   Sprite sheet có bố cục không đồng đều.
+   Phân tích nền để tìm các vùng sprite.
+===================================== */
+
+function groupRuns(values, threshold, maxGap) {
+ const result = [];
+ let start = -1;
+ let last = -1;
+
+ for (let i = 0; i < values.length; i++) {
+  if (values[i] >= threshold) {
+   if (start === -1) start = i;
+   last = i;
+  } else if (start !== -1 && i - last > maxGap) {
+   result.push([start, last]);
+   start = -1;
+  }
+ }
+
+ if (start !== -1) {
+  result.push([start, last]);
+ }
+
+ return result;
+}
+
+function detectSpriteFrames(data) {
+ const w = data.width;
+ const h = data.height;
+ const pixels = data.pixels;
+
+ const rows = new Uint16Array(h);
+
+ // Đếm pixel có hình ảnh trên từng hàng.
+ for (let y = 0; y < h; y++) {
+  for (let x = 0; x < w; x++) {
+   const i = (y * w + x) * 4;
+
+   if (pixels[i + 3] > 30) {
+    rows[y]++;
+   }
+  }
+ }
+
+ const rowBands = groupRuns(rows, 2, 8);
+ const result = [];
+
+ for (const band of rowBands) {
+  const top = band[0];
+  const bottom = band[1];
+
+  const columns = new Uint16Array(w);
+
+  for (let y = top; y <= bottom; y++) {
+   for (let x = 0; x < w; x++) {
+    const i = (y * w + x) * 4;
+
+    if (pixels[i + 3] > 30) {
+     columns[x]++;
     }
+   }
+  }
 
-    class BattleScene extends Phaser.Scene {
-      constructor() { super('BattleScene'); }
-      create() {
-        this.graphics = this.add.graphics();
-        this.drawGrid();
+  const xBands = groupRuns(columns, 2, 5);
+  const frames = [];
 
-        unitsData.forEach(u => {
-          const container = this.add.container(u.x * TILE_SIZE + TILE_SIZE/2, u.y * TILE_SIZE + TILE_SIZE/2);
-          const circle = this.add.circle(0, 0, 18, u.color);
-          const label = this.add.text(-8, -8, u.team === 'player' ? 'P' : 'E', { fontSize: '14px', fill: '#fff', fontStyle: 'bold' });
-          const hpBg = this.add.rectangle(0, 20, 32, 4, 0x000000);
-          const hpBar = this.add.rectangle(-16, 20, 32, 4, 0x2ecc71).setOrigin(0, 0.5);
-          container.add([circle, label, hpBg, hpBar]);
-          u.sprite = container;
-          u.hpBar = hpBar;
-        });
+  for (const xb of xBands) {
+   let minX = xb[0];
+   let maxX = xb[1];
+   let minY = bottom;
+   let maxY = top;
 
-        this.input.on('pointerdown', (ptr) => {
-          const gx = Math.floor(ptr.x / TILE_SIZE);
-          const gy = Math.floor(ptr.y / TILE_SIZE);
-          if (gx >= 0 && gx < GRID_SIZE && gy >= 0 && gy < GRID_SIZE) {
-            this.handleTileClick(gx, gy);
-          }
-        });
-      }
+   for (let y = top; y <= bottom; y++) {
+    for (let x = minX; x <= maxX; x++) {
+     const i = (y * w + x) * 4;
 
-      drawGrid() {
-        this.graphics.clear();
-        for (let y = 0; y < GRID_SIZE; y++) {
-          for (let x = 0; x < GRID_SIZE; x++) {
-            this.graphics.lineStyle(1, 0x33334d, 1);
-            this.graphics.fillStyle((x + y) % 2 === 0 ? 0x22223b : 0x2a2a4a, 1);
-            this.graphics.fillRect(x * TILE_SIZE, y * TILE_SIZE, TILE_SIZE, TILE_SIZE);
-            this.graphics.strokeRect(x * TILE_SIZE, y * TILE_SIZE, TILE_SIZE, TILE_SIZE);
-          }
-        }
-        moveTiles.forEach(t => {
-          this.graphics.fillStyle(0x2ecc71, 0.4);
-          this.graphics.fillRect(t.x * TILE_SIZE, t.y * TILE_SIZE, TILE_SIZE, TILE_SIZE);
-        });
-      }
-
-      handleTileClick(gx, gy) {
-        const target = unitsData.find(u => u.x === gx && u.y === gy && u.hp > 0);
-        if (target && target.team === 'player') {
-          selectedUnit = target;
-          moveTiles = [];
-          for (let y = 0; y < GRID_SIZE; y++) {
-            for (let x = 0; x < GRID_SIZE; x++) {
-              if (Math.abs(target.x - x) + Math.abs(target.y - y) <= target.mov) moveTiles.push({x, y});
-            }
-          }
-          this.drawGrid();
-          logMsg(`Đã chọn ${target.name}`);
-          return;
-        }
-
-        if (selectedUnit) {
-          if (target && target.team === 'enemy') {
-            const dist = Math.abs(selectedUnit.x - target.x) + Math.abs(selectedUnit.y - target.y);
-            if (dist === 1) {
-              this.startBattle(selectedUnit, target);
-              selectedUnit = null;
-              moveTiles = [];
-              this.drawGrid();
-              return;
-            }
-          }
-          if (moveTiles.some(t => t.x === gx && t.y === gy) && !target) {
-            selectedUnit.x = gx;
-            selectedUnit.y = gy;
-            this.tweens.add({ targets: selectedUnit.sprite, x: gx * TILE_SIZE + TILE_SIZE/2, y: gy * TILE_SIZE + TILE_SIZE/2, duration: 200 });
-            logMsg(`${selectedUnit.name} di chuyển đến (${gx}, ${gy})`);
-            moveTiles = [];
-            this.drawGrid();
-          }
-        }
-      }
-
-      startBattle(att, def) {
-        const popup = document.getElementById('battle-popup');
-        const attHpUI = document.getElementById('bp-att-hp');
-        const defHpUI = document.getElementById('bp-def-hp');
-        const sub = document.getElementById('bp-sub');
-
-        popup.style.display = 'flex';
-        attHpUI.innerText = `HP: ${att.hp}/${att.maxHp}`;
-        defHpUI.innerText = `HP: ${def.hp}/${def.maxHp}`;
-        sub.innerText = `Giao tranh: ${att.name} vs ${def.name}`;
-        logMsg(`--- GIAO TRANH: ${att.name} vs ${def.name} ---`);
-
-        let step = 0;
-        const timer = setInterval(() => {
-          if (step === 0) {
-            this.strike(att, def, defHpUI, sub);
-          } else if (step === 1) {
-            if (def.hp > 0) this.strike(def, att, attHpUI, sub);
-          } else {
-            clearInterval(timer);
-            setTimeout(() => { popup.style.display = 'none'; }, 1000);
-          }
-          step++;
-        }, 1200);
-      }
-
-      strike(att, def, hpUI, sub) {
-        const hitChance = 90;
-        if (Math.random() * 100 < hitChance) {
-          const dmg = Math.max(1, (att.str + att.weapon.mt) - def.def);
-          def.hp = Math.max(0, def.hp - dmg);
-          def.hpBar.setScale(def.hp / def.maxHp, 1);
-          hpUI.innerText = `HP: ${def.hp}/${def.maxHp}`;
-          logMsg(`💥 ${att.name} đánh trúng! ${def.name} -${dmg} HP (Còn ${def.hp})`);
-          sub.innerText = `💥 ${att.name} đánh trúng -${dmg} HP!`;
-          if (def.hp === 0) {
-            logMsg(`💀 ${def.name} đã gục ngã!`);
-            def.sprite.setVisible(false);
-          }
-        } else {
-          logMsg(`💨 ${att.name} đánh trượt!`);
-          sub.innerText = `💨 ${att.name} đánh trượt!`;
-        }
-      }
+     if (pixels[i + 3] > 30) {
+      minY = Math.min(minY, y);
+      maxY = Math.max(maxY, y);
+     }
     }
+   }
 
-    new Phaser.Game({
-      type: Phaser.AUTO,
-      width: TILE_SIZE * GRID_SIZE,
-      height: TILE_SIZE * GRID_SIZE,
-      parent: 'game-container',
-      pixelArt: true,
-      scene: BattleScene
+   const fw = maxX - minX + 1;
+   const fh = maxY - minY + 1;
+
+   // Loại các hạt hiệu ứng quá nhỏ và chân dung lớn.
+   if (
+    fw >= 16 &&
+    fh >= 25 &&
+    fw <= 115 &&
+    fh <= 145
+   ) {
+    frames.push({
+     x: Math.max(0, minX - 2),
+     y: Math.max(0, minY - 2),
+     w: Math.min(w - minX, fw + 4),
+     h: Math.min(h - minY, fh + 4)
     });
-  </script>
+   }
+  }
+
+  if (frames.length >= 2) {
+   result.push({
+    y: top,
+    frames
+   });
+  }
+ }
+
+ console.log("Detected sprite rows:", result);
+
+ return result;
+}
+
+function selectAnimations(rows) {
+ if (!rows.length) return null;
+
+ const sorted = [...rows].sort(
+  (a, b) => b.frames.length - a.frames.length
+ );
+
+ const idleRow = sorted[0];
+ const attackRow = sorted[1] || sorted[0];
+
+ return {
+  idle: idleRow.frames.slice(0, 4),
+  attack: attackRow.frames.slice(0, 8)
+ };
+}
+
+/* =====================================
+   MAIN GAME
+===================================== */
+
+class BattleScene extends Phaser.Scene {
+
+ constructor() {
+  super("BattleScene");
+ }
+
+ preload() {
+  this.load.image("char1", "./Char1.jpg");
+  this.load.image("char2", "./Char2.png");
+ }
+
+ create() {
+
+  this.graphics = this.add.graphics();
+
+  this.drawGrid();
+
+  // Xử lý ảnh gốc.
+  const char1 = processSprite(this, "char1", true);
+  const char2 = processSprite(this, "char2", false);
+
+  this.animations = {
+   player: selectAnimations(detectSpriteFrames(char1)),
+   enemy: selectAnimations(detectSpriteFrames(char2))
+  };
+
+  this.createUnits();
+
+  this.createBattleScreen();
+
+  this.input.on("pointerdown", pointer => {
+
+   if (battleInProgress) return;
+
+   const gx = Math.floor(pointer.x / TILE);
+   const gy = Math.floor(pointer.y / TILE);
+
+   if (
+    gx >= 0 && gx < GRID &&
+    gy >= 0 && gy < GRID
+   ) {
+    this.handleTileClick(gx, gy);
+   }
+  });
+
+  logMsg("Đã tải sprite sheet. Sẵn sàng chiến đấu!");
+ }
+
+ /* =====================================
+    MAP
+ ===================================== */
+
+ drawGrid() {
+  this.graphics.clear();
+
+  for (let y = 0; y < GRID; y++) {
+   for (let x = 0; x < GRID; x++) {
+
+    this.graphics.fillStyle(
+     (x + y) % 2 === 0 ? 0x22223b : 0x2a2a4a
+    );
+
+    this.graphics.fillRect(
+     x * TILE, y * TILE, TILE, TILE
+    );
+
+    this.graphics.lineStyle(1, 0x44445a);
+    this.graphics.strokeRect(
+     x * TILE, y * TILE, TILE, TILE
+    );
+   }
+  }
+
+  moveTiles.forEach(t => {
+   this.graphics.fillStyle(0x2ecc71, 0.4);
+   this.graphics.fillRect(
+    t.x * TILE, t.y * TILE, TILE, TILE
+   );
+  });
+ }
+
+ createUnits() {
+  unitsData.forEach(u => {
+
+   const x = u.x * TILE + TILE / 2;
+   const y = u.y * TILE + TILE / 2;
+
+   const container = this.add.container(x, y);
+
+   const color = u.team === "player"
+    ? 0x3498db : 0xe74c3c;
+
+   const circle = this.add.circle(0, 0, 18, color);
+
+   const label = this.add.text(
+    -7, -9,
+    u.team === "player" ? "P" : "E",
+    { fontSize: "15px", color: "#ffffff" }
+   );
+
+   const bg = this.add.rectangle(
+    0, 20, 32, 5, 0x000000
+   );
+
+   const hp = this.add.rectangle(
+    -16, 20, 32, 5, 0x22c55e
+   ).setOrigin(0, 0.5);
+
+   container.add([circle, label, bg, hp]);
+
+   u.sprite = container;
+   u.hpBar = hp;
+  });
+ }
+
+ handleTileClick(gx, gy) {
+
+  const target = unitsData.find(
+   u => u.x === gx && u.y === gy && u.hp > 0
+  );
+
+  if (target && target.team === "player") {
+
+   selectedUnit = target;
+   moveTiles = [];
+
+   for (let y = 0; y < GRID; y++) {
+    for (let x = 0; x < GRID; x++) {
+
+     const dist =
+      Math.abs(x - target.x) +
+      Math.abs(y - target.y);
+
+     if (dist <= target.mov) {
+      moveTiles.push({ x, y });
+     }
+    }
+   }
+
+   this.drawGrid();
+   logMsg("Đã chọn " + target.name);
+   return;
+  }
+
+  if (!selectedUnit) return;
+
+  if (target && target.team === "enemy") {
+
+   const dist =
+    Math.abs(selectedUnit.x - target.x) +
+    Math.abs(selectedUnit.y - target.y);
+
+   if (dist === 1) {
+
+    const attacker = selectedUnit;
+
+    selectedUnit = null;
+    moveTiles = [];
+    this.drawGrid();
+
+    this.startBattle(attacker, target);
+    return;
+   }
+  }
+
+  if (
+   moveTiles.some(t => t.x === gx && t.y === gy) &&
+   !target
+  ) {
+
+   const unit = selectedUnit;
+
+   unit.x = gx;
+   unit.y = gy;
+
+   this.tweens.add({
+    targets: unit.sprite,
+    x: gx * TILE + TILE / 2,
+    y: gy * TILE + TILE / 2,
+    duration: 200
+   });
+
+   moveTiles = [];
+   selectedUnit = null;
+
+   this.drawGrid();
+
+   logMsg(unit.name + " đã di chuyển.");
+  }
+ }
+
+ /* =====================================
+    FE8 BATTLE SCREEN
+ ===================================== */
+
+ createBattleScreen() {
+
+  this.battleUI = this.add.container(0, 0);
+  this.battleUI.setDepth(1000);
+
+  const bg = this.add.rectangle(
+   192, 192, 384, 384, 0x101522, 1
+  );
+
+  const upper = this.add.rectangle(
+   192, 90, 384, 180, 0x263b55
+  );
+
+  const lower = this.add.rectangle(
+   192, 285, 384, 198, 0x182337
+  );
+
+  const ground = this.add.rectangle(
+   192, 320, 384, 5, 0x8c9a9e
+  );
+
+  this.battleUI.add([bg, upper, lower, ground]);
+
+  // Tiêu đề.
+  this.battleTitle = this.add.text(
+   192, 14, "BATTLE",
+   {
+    fontSize: "17px",
+    color: "#facc15",
+    fontStyle: "bold"
+   }
+  ).setOrigin(0.5);
+
+  this.battleUI.add(this.battleTitle);
+
+  // Nhân vật.
+  this.attackerSprite = this.add.image(
+   110, 285, "char1_clean"
+  );
+
+  this.defenderSprite = this.add.image(
+   280, 285, "char2_clean"
+  );
+
+  this.attackerSprite.setOrigin(0.5, 1);
+  this.defenderSprite.setOrigin(0.5, 1);
+  this.defenderSprite.setFlipX(true);
+
+  this.battleUI.add([
+   this.attackerSprite,
+   this.defenderSprite
+  ]);
+
+  // Tên nhân vật.
+  this.attackerName = this.add.text(
+   18, 43, "",
+   { fontSize: "13px", color: "#38bdf8" }
+  );
+
+  this.defenderName = this.add.text(
+   366, 43, "",
+   {
+    fontSize: "13px",
+    color: "#f87171"
+   }
+  ).setOrigin(1, 0);
+
+  this.battleUI.add([
+   this.attackerName,
+   this.defenderName
+  ]);
+
+  // HP.
+  this.attackerHPText = this.add.text(
+   18, 62, "",
+   { fontSize: "12px", color: "#ffffff" }
+  );
+
+  this.defenderHPText = this.add.text(
+   366, 62, "",
+   {
+    fontSize: "12px",
+    color: "#ffffff"
+   }
+  ).setOrigin(1, 0);
+
+  this.battleUI.add([
+   this.attackerHPText,
+   this.defenderHPText
+  ]);
+
+  // Thanh máu.
+  this.attackerBarBG = this.add.rectangle(
+   18, 84, 145, 9, 0x111111
+  ).setOrigin(0, 0.5);
+
+  this.defenderBarBG = this.add.rectangle(
+   221, 84, 145, 9, 0x111111
+  ).setOrigin(0, 0.5);
+
+  this.attackerBar = this.add.rectangle(
+   18, 84, 145, 7, 0x22c55e
+  ).setOrigin(0, 0.5);
+
+  this.defenderBar = this.add.rectangle(
+   221, 84, 145, 7, 0x22c55e
+  ).setOrigin(0, 0.5);
+
+  this.battleUI.add([
+   this.attackerBarBG,
+   this.defenderBarBG,
+   this.attackerBar,
+   this.defenderBar
+  ]);
+
+  this.battleMessage = this.add.text(
+   192, 350,
+   "BATTLE START!",
+   {
+    fontSize: "13px",
+    color: "#facc15",
+    align: "center",
+    wordWrap: { width: 350 }
+   }
+  ).setOrigin(0.5);
+
+  this.battleUI.add(this.battleMessage);
+
+  this.battleUI.setVisible(false);
+ }
+
+ /* =====================================
+    SPRITE FRAME DISPLAY
+ ===================================== */
+
+ setFrame(sprite, frame) {
+
+  if (!frame) return;
+
+  sprite.setCrop(
+   frame.x,
+   frame.y,
+   frame.w,
+   frame.h
+  );
+
+  const scale = Math.min(
+   125 / frame.w,
+   155 / frame.h
+  );
+
+  sprite.setScale(scale);
+ }
+
+ async playFrames(sprite, frames, delay = 100) {
+
+  if (!frames || !frames.length) return;
+
+  for (const frame of frames) {
+   this.setFrame(sprite, frame);
+   await this.wait(delay);
+  }
+ }
+
+ wait(ms) {
+  return new Promise(resolve => {
+   this.time.delayedCall(ms, resolve);
+  });
+ }
+
+ /* =====================================
+    HP
+ ===================================== */
+
+ updateBattleHP(att, def) {
+
+  this.attackerHPText.setText(
+   "HP " + att.hp + "/" + att.maxHp
+  );
+
+  this.defenderHPText.setText(
+   "HP " + def.hp + "/" + def.maxHp
+  );
+
+  this.attackerBar.width =
+   145 * (att.hp / att.maxHp);
+
+  this.defenderBar.width =
+   145 * (def.hp / def.maxHp);
+
+  this.attackerBar.fillColor =
+   att.hp < att.maxHp / 3
+    ? 0xef4444 : 0x22c55e;
+
+  this.defenderBar.fillColor =
+   def.hp < def.maxHp / 3
+    ? 0xef4444 : 0x22c55e;
+ }
+
+ /* =====================================
+    BATTLE ANIMATION
+ ===================================== */
+
+ async startBattle(att, def) {
+
+  if (battleInProgress) return;
+
+  battleInProgress = true;
+
+  this.battleUI.setVisible(true);
+
+  // Ẩn quân trên bản đồ trong lúc chiến đấu.
+  att.sprite.setVisible(false);
+  def.sprite.setVisible(false);
+
+  this.attackerSprite.setVisible(true);
+  this.defenderSprite.setVisible(true);
+
+  this.attackerSprite.setPosition(110, 285);
+  this.defenderSprite.setPosition(280, 285);
+
+  this.attackerName.setText(att.name);
+  this.defenderName.setText(def.name);
+
+  this.battleMessage.setText("GIAO TRANH!");
+
+  this.updateBattleHP(att, def);
+
+  const p = this.animations.player;
+  const e = this.animations.enemy;
+
+  if (p?.idle?.length) {
+   this.setFrame(this.attackerSprite, p.idle[0]);
+  }
+
+  if (e?.idle?.length) {
+   this.setFrame(this.defenderSprite, e.idle[0]);
+  }
+
+  logMsg("=== " + att.name + " VS " + def.name + " ===");
+
+  await this.wait(700);
+
+  // Player tấn công.
+  await this.performStrike(
+   att, def,
+   this.attackerSprite,
+   this.defenderSprite,
+   p?.attack,
+   this.defenderBar
+  );
+
+  // Enemy phản công nếu còn sống.
+  if (def.hp > 0 && att.hp > 0) {
+
+   await this.wait(600);
+
+   await this.performStrike(
+    def, att,
+    this.defenderSprite,
+    this.attackerSprite,
+    e?.attack,
+    this.attackerBar
+   );
+  }
+
+  await this.wait(700);
+
+  this.battleMessage.setText(
+   def.hp <= 0
+    ? def.name + " DA GUC NGA!"
+    : att.hp <= 0
+      ? att.name + " DA GUC NGA!"
+      : "KET THUC GIAO TRANH"
+  );
+
+  await this.wait(900);
+
+  this.battleUI.setVisible(false);
+
+  // Quay lại bản đồ.
+  if (att.hp > 0) att.sprite.setVisible(true);
+  if (def.hp > 0) def.sprite.setVisible(true);
+
+  battleInProgress = false;
+
+  this.drawGrid();
+
+  logMsg("=== KẾT THÚC GIAO TRANH ===");
+ }
+
+ async performStrike(
+  attacker,
+  defender,
+  attackSprite,
+  defendSprite,
+  frames,
+  hpBar
+ ) {
+
+  const hit = Math.random() * 100 < 90;
+
+  if (frames && frames.length) {
+   await this.playFrames(attackSprite, frames, 90);
+  }
+
+  // Lao tới tấn công.
+  await new Promise(resolve => {
+
+   this.tweens.add({
+    targets: attackSprite,
+    x: attackSprite.x < defendSprite.x
+     ? defendSprite.x - 75
+     : defendSprite.x + 75,
+    duration: 170,
+    yoyo: true,
+    onComplete: resolve
+   });
+
+  });
+
+  if (hit) {
+
+   const damage = Math.max(
+    1,
+    attacker.str + attacker.weapon.mt - defender.def
+   );
+
+   defender.hp = Math.max(
+    0,
+    defender.hp - damage
+   );
+
+   this.updateBattleHP(attacker, defender);
+
+   this.battleMessage.setText(
+    attacker.name + " HIT! -" + damage + " HP"
+   );
+
+   // Hiệu ứng rung khi trúng đòn.
+   await new Promise(resolve => {
+
+    this.tweens.add({
+     targets: defendSprite,
+     x: defendSprite.x + 9,
+     duration: 45,
+     yoyo: true,
+     repeat: 3,
+     onComplete: resolve
+    });
+
+   });
+
+   logMsg(
+    attacker.name + " đánh trúng! -" +
+    damage + " HP."
+   );
+
+   if (defender.hp <= 0) {
+
+    defendSprite.setVisible(false);
+
+    logMsg(defender.name + " đã gục ngã!");
+   }
+
+  } else {
+
+   this.battleMessage.setText(
+    attacker.name + " MISS!"
+   );
+
+   logMsg(attacker.name + " đánh trượt!");
+  }
+
+  await this.wait(450);
+ }
+}
+
+/* =====================================
+   GAME CONFIGURATION
+===================================== */
+
+new Phaser.Game({
+
+ type: Phaser.AUTO,
+
+ width: TILE * GRID,
+ height: TILE * GRID,
+
+ parent: "game-container",
+
+ backgroundColor: "#22223b",
+
+ pixelArt: true,
+
+ render: {
+  antialias: false,
+  roundPixels: true
+ },
+
+ scale: {
+  mode: Phaser.Scale.FIT,
+  autoCenter: Phaser.Scale.CENTER_BOTH
+ },
+
+ scene: BattleScene
+});
+
+</script>
 </body>
 </html>
