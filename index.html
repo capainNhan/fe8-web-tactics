@@ -3,20 +3,20 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>FE8 Web Tactics - Sprite Edition</title>
+  <title>FE8 Web Tactics - Character Edition</title>
   <style>
     body { margin: 0; background: #1a1a2e; display: flex; flex-direction: column; align-items: center; color: #fff; font-family: monospace; padding-top: 10px; }
     #game-container { border: 2px solid #4ecca3; box-shadow: 0 4px 10px rgba(0,0,0,0.5); }
-    #log-box { width: 380px; height: 120px; background: #0f0f1a; border: 1px solid #444; margin-top: 10px; padding: 8px; overflow-y: auto; font-size: 12px; line-height: 1.4; border-radius: 4px; }
+    #log-box { width: 380px; height: 130px; background: #0f0f1a; border: 1px solid #444; margin-top: 10px; padding: 8px; overflow-y: auto; font-size: 12px; line-height: 1.4; border-radius: 4px; }
   </style>
   <script src="https://cdn.jsdelivr.net/npm/phaser@3.80.1/dist/phaser.min.js"></script>
 </head>
 <body>
   <div id="game-container"></div>
-  <div id="log-box">Đã tải giao diện chiến thuật. Chạm vào nhân vật để di chuyển...</div>
+  <div id="log-box">Hệ thống sẵn sàng. Chạm vào Kiếm Sĩ (Xanh dương) để di chuyển...</div>
 
   <script>
-    // --- LÕI LOGIC FE8 ---
+    // --- LÕI TOÁN HỌC FE8 ---
     const WEAPON_TRIANGLE = {
       sword: { axe: { dmg: 1, hit: 15 }, lance: { dmg: -1, hit: -15 } },
       lance: { sword: { dmg: 1, hit: 15 }, axe: { dmg: -1, hit: -15 } },
@@ -38,14 +38,14 @@
       return Math.max(0, unit.spd - penalty);
     }
 
-    function calculateBattlePreview(attacker, defender, terrainDef = 0, terrainAvo = 0) {
+    function calculateBattlePreview(attacker, defender) {
       const triA = getTriangleBonus(attacker.weapon, defender.weapon);
       const triD = getTriangleBonus(defender.weapon, attacker.weapon);
       const asA = calcAttackSpeed(attacker);
       const asD = calcAttackSpeed(defender);
 
-      const dmgA = Math.max(0, (attacker.str + attacker.weapon.mt + triA.dmg) - (defender.def + terrainDef));
-      const hitA = Math.max(0, Math.min(100, (attacker.weapon.hit + (attacker.skl * 2) + Math.floor(attacker.lck / 2) + triA.hit) - ((asD * 2) + defender.lck + terrainAvo)));
+      const dmgA = Math.max(0, (attacker.str + attacker.weapon.mt + triA.dmg) - defender.def);
+      const hitA = Math.max(0, Math.min(100, (attacker.weapon.hit + (attacker.skl * 2) + Math.floor(attacker.lck / 2) + triA.hit) - ((asD * 2) + defender.lck)));
       const critA = Math.max(0, Math.min(100, (attacker.weapon.crit + Math.floor(attacker.skl / 2)) - defender.lck));
 
       const dmgD = Math.max(0, (defender.str + defender.weapon.mt + triD.dmg) - attacker.def);
@@ -64,12 +64,12 @@
 
     const unitsData = [
       {
-        id: 'player1', name: 'Kiếm Sĩ', team: 'player', x: 1, y: 3,
+        id: 'player1', name: 'Kiếm Sĩ (P1)', team: 'player', x: 1, y: 3, color: 0x3498db, borderColor: 0x2980b9,
         hp: 24, maxHp: 24, str: 9, skl: 12, spd: 13, lck: 6, def: 5, con: 8, mov: 5,
         weapon: { name: 'Iron Sword', type: 'sword', mt: 5, hit: 90, crit: 0, wt: 5, range: 1 }
       },
       {
-        id: 'enemy1', name: 'Lính Đánh Thuê', team: 'enemy', x: 5, y: 3,
+        id: 'enemy1', name: 'Lính Đánh Thuê (E1)', team: 'enemy', x: 5, y: 3, color: 0xe74c3c, borderColor: 0xc0392b,
         hp: 26, maxHp: 26, str: 10, skl: 8, spd: 8, lck: 3, def: 6, con: 10, mov: 5,
         weapon: { name: 'Steel Blade', type: 'sword', mt: 11, hit: 70, crit: 0, wt: 12, range: 1 }
       }
@@ -87,58 +87,28 @@
     class BattleScene extends Phaser.Scene {
       constructor() { super('BattleScene'); }
 
-            preload() {
-        // Load đúng tên file ảnh bạn đã tải lên GitHub
-        this.load.image('char1', '1000143873.png');
-        this.load.image('char2', '1000143882.jpg');
-      }
-
-      create() {
-        this.graphics = this.add.graphics();
-        this.drawGrid();
-
-        unitsData.forEach((u, index) => {
-          // Gán ảnh 1 cho Player, ảnh 2 cho Enemy
-          const spriteKey = index === 0 ? 'char1' : 'char2';
-          const sprite = this.add.sprite(u.x * TILE_SIZE + TILE_SIZE / 2, u.y * TILE_SIZE + TILE_SIZE / 2, spriteKey);
-          sprite.setScale(1.0); // Chỉnh kích thước to nhỏ tùy ý (ví dụ 0.8 hoặc 1.0)
-          
-          if (u.team === 'enemy') {
-            sprite.setTint(0xff8888);
-          } else {
-            sprite.setTint(0x88ccff);
-          }
-
-          u.sprite = sprite;
-        });
-
-        this.input.on('pointerdown', (pointer) => {
-          const gx = Math.floor(pointer.x / TILE_SIZE);
-          const gy = Math.floor(pointer.y / TILE_SIZE);
-          if (gx >= 0 && gx < GRID_SIZE && gy >= 0 && gy < GRID_SIZE) {
-            this.handleTileClick(gx, gy);
-          }
-        });
-      }
-
-
       create() {
         this.graphics = this.add.graphics();
         this.drawGrid();
 
         unitsData.forEach(u => {
-          // Hiển thị nhân vật bằng hình ảnh sprite thay cho hình tròn
-          const sprite = this.add.sprite(u.x * TILE_SIZE + TILE_SIZE / 2, u.y * TILE_SIZE + TILE_SIZE / 2, 'charSprite');
-          sprite.setScale(1.2); // Tùy chỉnh phóng to thu nhỏ pixel art cho đẹp mắt
+          // Tạo container trực quan phong cách thẻ bài/nhân vật GBA sắc nét
+          const container = this.add.container(u.x * TILE_SIZE + TILE_SIZE / 2, u.y * TILE_SIZE + TILE_SIZE / 2);
           
-          // Đổi màu tint nhẹ để phân biệt phe ta (xanh) và phe địch (đỏ)
-          if (u.team === 'enemy') {
-            sprite.setTint(0xff8888);
-          } else {
-            sprite.setTint(0x88ccff);
-          }
+          const bg = this.add.rectangle(0, 0, 38, 38, u.color, 0.9);
+          bg.setStrokeStyle(2, u.borderColor);
+          
+          const label = this.add.text(0, 0, u.team === 'player' ? 'P' : 'E', { 
+            fontSize: '18px', fill: '#fff', fontStyle: 'bold', fontFamily: 'monospace' 
+          }).setOrigin(0.5);
 
-          u.sprite = sprite;
+          // Thanh HP nhỏ bên dưới nhân vật
+          const hpBarBg = this.add.rectangle(0, 22, 36, 4, 0x000000);
+          const hpBar = this.add.rectangle(-18, 22, 36, 4, 0x2ecc71).setOrigin(0, 0.5);
+
+          container.add([bg, label, hpBarBg, hpBar]);
+          u.sprite = container;
+          u.hpBar = hpBar;
         });
 
         this.input.on('pointerdown', (pointer) => {
@@ -239,6 +209,11 @@
           const isCrit = (Math.random() * 100) < stats.crit;
           const finalDmg = isCrit ? stats.dmg * 3 : stats.dmg;
           def.hp = Math.max(0, def.hp - finalDmg);
+          
+          // Cập nhật thanh HP
+          const hpPercent = def.hp / def.maxHp;
+          def.hpBar.setScale(Math.max(0, hpPercent), 1);
+
           logMsg(`💥 ${att.name} trúng${isCrit ? ' CHÍ MẠNG' : ''}! ${def.name} -${finalDmg} HP (Còn ${def.hp}/${def.maxHp})`);
           if (def.hp === 0) {
             logMsg(`💀 ${def.name} đã gục ngã!`);
