@@ -606,23 +606,63 @@ class BattleScene extends Phaser.Scene {
  ===================================== */
 
  setFrame(sprite, frame) {
-
   if (!frame) return;
 
-  sprite.setCrop(
-   frame.x,
-   frame.y,
-   frame.w,
-   frame.h
-  );
+  // Xác định ảnh gốc của từng bên.
+  const sourceKey =
+    sprite === this.attackerSprite
+      ? "char1_clean"
+      : "char2_clean";
+
+  const source = this.textures
+    .get(sourceKey)
+    .getSourceImage();
+
+  // Mỗi vùng sprite có một texture riêng.
+  const textureKey = [
+    "frame",
+    sourceKey,
+    frame.x,
+    frame.y,
+    frame.w,
+    frame.h
+  ].join("_");
+
+  // Chỉ cắt và tạo texture một lần.
+  if (!this.textures.exists(textureKey)) {
+    const canvas = document.createElement("canvas");
+
+    canvas.width = frame.w;
+    canvas.height = frame.h;
+
+    const ctx = canvas.getContext("2d");
+
+    ctx.drawImage(
+      source,
+      frame.x,
+      frame.y,
+      frame.w,
+      frame.h,
+      0,
+      0,
+      frame.w,
+      frame.h
+    );
+
+    this.textures.addCanvas(textureKey, canvas);
+  }
+
+  // Dùng ảnh đã cắt thay vì ảnh atlas.
+  sprite.setTexture(textureKey);
+  sprite.setOrigin(0.5, 1);
 
   const scale = Math.min(
-   125 / frame.w,
-   155 / frame.h
+    125 / frame.w,
+    155 / frame.h
   );
 
   sprite.setScale(scale);
- }
+}
 
  async playFrames(sprite, frames, delay = 100) {
 
