@@ -325,7 +325,8 @@ export class BattleScene extends Phaser.Scene {
       280, 285, "char2"
     ).setOrigin(0.5, 1);
 
-    this.defenderSprite.setFlipX(true);
+    this.attackerSprite.setFlipX(true);
+    this.defenderSprite.setFlipX(false);
 
     this.battleUI.add([
       this.attackerSprite,
