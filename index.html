@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>FE8 Web Tactics MVP</title>
+  <title>FE8 Web Tactics - Sprite Edition</title>
   <style>
     body { margin: 0; background: #1a1a2e; display: flex; flex-direction: column; align-items: center; color: #fff; font-family: monospace; padding-top: 10px; }
     #game-container { border: 2px solid #4ecca3; box-shadow: 0 4px 10px rgba(0,0,0,0.5); }
@@ -13,10 +13,10 @@
 </head>
 <body>
   <div id="game-container"></div>
-  <div id="log-box">Chạm vào nhân vật Xanh để di chuyển hoặc tấn công...</div>
+  <div id="log-box">Đã tải giao diện chiến thuật. Chạm vào nhân vật để di chuyển...</div>
 
   <script>
-    // --- PHẦN 1: FE8 LOGIC ---
+    // --- LÕI LOGIC FE8 ---
     const WEAPON_TRIANGLE = {
       sword: { axe: { dmg: 1, hit: 15 }, lance: { dmg: -1, hit: -15 } },
       lance: { sword: { dmg: 1, hit: 15 }, axe: { dmg: -1, hit: -15 } },
@@ -58,18 +58,18 @@
       };
     }
 
-    // --- PHẦN 2: GAME MAIN (PHASER) ---
+    // --- GAME MAIN ---
     const TILE_SIZE = 48;
     const GRID_SIZE = 8;
 
     const unitsData = [
       {
-        id: 'player1', name: 'Kiếm Sĩ', team: 'player', x: 1, y: 3, color: 0x3498db,
+        id: 'player1', name: 'Kiếm Sĩ', team: 'player', x: 1, y: 3,
         hp: 24, maxHp: 24, str: 9, skl: 12, spd: 13, lck: 6, def: 5, con: 8, mov: 5,
         weapon: { name: 'Iron Sword', type: 'sword', mt: 5, hit: 90, crit: 0, wt: 5, range: 1 }
       },
       {
-        id: 'enemy1', name: 'Lính Đánh Thuê', team: 'enemy', x: 5, y: 3, color: 0xe74c3c,
+        id: 'enemy1', name: 'Lính Đánh Thuê', team: 'enemy', x: 5, y: 3,
         hp: 26, maxHp: 26, str: 10, skl: 8, spd: 8, lck: 3, def: 6, con: 10, mov: 5,
         weapon: { name: 'Steel Blade', type: 'sword', mt: 11, hit: 70, crit: 0, wt: 12, range: 1 }
       }
@@ -87,16 +87,29 @@
     class BattleScene extends Phaser.Scene {
       constructor() { super('BattleScene'); }
 
+      preload() {
+  // Load ảnh trực tiếp từ thư mục gốc
+  this.load.image('char1.jpg', 'char2.png');
+}
+      }
+
       create() {
         this.graphics = this.add.graphics();
         this.drawGrid();
 
         unitsData.forEach(u => {
-          const container = this.add.container(u.x * TILE_SIZE + TILE_SIZE / 2, u.y * TILE_SIZE + TILE_SIZE / 2);
-          const circle = this.add.circle(0, 0, 18, u.color);
-          const label = this.add.text(-10, -8, u.team === 'player' ? 'P1' : 'E1', { fontSize: '14px', fill: '#fff', fontStyle: 'bold' });
-          container.add([circle, label]);
-          u.sprite = container;
+          // Hiển thị nhân vật bằng hình ảnh sprite thay cho hình tròn
+          const sprite = this.add.sprite(u.x * TILE_SIZE + TILE_SIZE / 2, u.y * TILE_SIZE + TILE_SIZE / 2, 'charSprite');
+          sprite.setScale(1.2); // Tùy chỉnh phóng to thu nhỏ pixel art cho đẹp mắt
+          
+          // Đổi màu tint nhẹ để phân biệt phe ta (xanh) và phe địch (đỏ)
+          if (u.team === 'enemy') {
+            sprite.setTint(0xff8888);
+          } else {
+            sprite.setTint(0x88ccff);
+          }
+
+          u.sprite = sprite;
         });
 
         this.input.on('pointerdown', (pointer) => {
