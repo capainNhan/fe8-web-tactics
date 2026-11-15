@@ -3,17 +3,62 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>FE8 Web Tactics - Sprite Edition</title>
+  <title>FE8 Web Tactics - Full Battle Scene</title>
   <style>
-    body { margin: 0; background: #1a1a2e; display: flex; flex-direction: column; align-items: center; color: #fff; font-family: monospace; padding-top: 10px; }
-    #game-container { border: 2px solid #4ecca3; box-shadow: 0 4px 10px rgba(0,0,0,0.5); }
-    #log-box { width: 380px; height: 130px; background: #0f0f1a; border: 1px solid #444; margin-top: 10px; padding: 8px; overflow-y: auto; font-size: 12px; line-height: 1.4; border-radius: 4px; }
+    body { margin: 0; background: #1a1a2e; display: flex; flex-direction: column; align-items: center; color: #fff; font-family: monospace; padding-top: 5px; }
+    #game-container { border: 2px solid #4ecca3; box-shadow: 0 4px 10px rgba(0,0,0,0.5); position: relative; }
+    
+    /* Khung giao tranh phong cách FE8 GBA bật lên khi đánh nhau */
+    #battle-popup {
+      position: absolute;
+      top: 40px;
+      left: 10px;
+      width: 364px;
+      height: 240px;
+      background: rgba(16, 24, 48, 0.95);
+      border: 3px solid #f1c40f;
+      border-radius: 6px;
+      display: none;
+      flex-direction: column;
+      justify-content: space-between;
+      padding: 10px;
+      box-shadow: 0 8px 20px rgba(0,0,0,0.8);
+      z-index: 100;
+    }
+    .battle-header { text-align: center; font-size: 14px; font-weight: bold; color: #f1c40f; border-bottom: 1px solid #444; padding-bottom: 4px; }
+    .battle-combatants { display: flex; justify-content: space-around; align-items: center; height: 130px; }
+    .combatant-panel { text-align: center; width: 45%; background: #0f172a; border: 1px solid #334155; padding: 6px; border-radius: 4px; }
+    .combatant-name { font-size: 12px; color: #38bdf8; margin-bottom: 4px; }
+    .combatant-hp { font-size: 14px; font-weight: bold; color: #22c55e; }
+    .battle-log-sub { font-size: 11px; color: #cbd5e1; background: #020617; padding: 6px; border-radius: 3px; height: 40px; overflow-y: auto; }
+
+    #log-box { width: 384px; height: 100px; background: #0f0f1a; border: 1px solid #444; margin-top: 8px; padding: 6px; overflow-y: auto; font-size: 11px; line-height: 1.3; border-radius: 4px; }
   </style>
   <script src="https://cdn.jsdelivr.net/npm/phaser@3.80.1/dist/phaser.min.js"></script>
 </head>
 <body>
-  <div id="game-container"></div>
-  <div id="log-box">Hệ thống Sprite sẵn sàng. Chạm vào Kiếm Sĩ để di chuyển...</div>
+  <div id="game-container">
+    <!-- Khung giao tranh mô phỏng FE8 GBA xuất hiện đè lên bản đồ khi đánh nhau -->
+    <div id="battle-popup">
+      <div class="battle-header" id="bp-title">GIAO TRANH CHIẾN THUẬT</div>
+      <div class="battle-combatants">
+        <div class="combatant-panel">
+          <div class="combatant-name" id="bp-att-name">Kiếm Sĩ</div>
+          <div style="font-size:22px; margin: 6px 0;">⚔️</div>
+          <div class="combatant-hp" id="bp-att-hp">HP: 24/24</div>
+        </div>
+        <div style="font-size: 18px; font-weight: bold; color: #f97316;">VS</div>
+        <div class="combatant-panel">
+          <div class="combatant-name" id="bp-def-name">Lính Đánh Thuê</div>
+          <div style="font-size:22px; margin: 6px 0;">🛡️</div>
+          <div class="combatant-hp" id="bp-def-hp">HP: 26/26</div>
+        </div>
+      </div>
+      <div class="battle-log-sub" id="bp-sublog">Đang chuẩn bị giao tranh...</div>
+    </div>
+  </div>
+
+  <div id="log-box">Chạm vào Kiếm Sĩ (Xanh) rồi bấm vào Địch cạnh bên để mở màn giao tranh chuẩn FE8!</div>
 
   <script>
     // --- LÕI TOÁN HỌC FE8 ---
@@ -64,12 +109,12 @@
 
     const unitsData = [
       {
-        id: 'player1', name: 'Kiếm Sĩ (P1)', team: 'player', x: 1, y: 3,
+        id: 'player1', name: 'Kiếm Sĩ (P1)', team: 'player', x: 1, y: 3, color: 0x3498db, borderColor: 0x2980b9,
         hp: 24, maxHp: 24, str: 9, skl: 12, spd: 13, lck: 6, def: 5, con: 8, mov: 5,
         weapon: { name: 'Iron Sword', type: 'sword', mt: 5, hit: 90, crit: 0, wt: 5, range: 1 }
       },
       {
-        id: 'enemy1', name: 'Lính Đánh Thuê (E1)', team: 'enemy', x: 5, y: 3,
+        id: 'enemy1', name: 'Lính Đánh Thuê (E1)', team: 'enemy', x: 5, y: 3, color: 0xe74c3c, borderColor: 0xc0392b,
         hp: 26, maxHp: 26, str: 10, skl: 8, spd: 8, lck: 3, def: 6, con: 10, mov: 5,
         weapon: { name: 'Steel Blade', type: 'sword', mt: 11, hit: 70, crit: 0, wt: 12, range: 1 }
       }
@@ -88,33 +133,27 @@
       constructor() { super('BattleScene'); }
 
       preload() {
-        // Tải ảnh sprite sheet từ kho GitHub (giả lập cắt khung chuẩn GBA khoảng 32x32 hoặc 48x48 mỗi frame)
-        // Nếu ảnh sprite sheet của bạn có kích thước khác, sau này ta sẽ tinh chỉnh lại thông số frameWidth/frameHeight
-        this.load.spritesheet('char1', 'Char2.png', { frameWidth: 32, frameHeight: 32 });
-        this.load.spritesheet('char2', 'Char1.jpg', { frameWidth: 32, frameHeight: 32 });
+        // Nạp sẵn sprite sheet của bạn để sẵn sàng cắt khung làm hoạt hoạ chém nhau ở bước tiếp theo
+        this.load.image('char1', 'Char1.jpg');
+        this.load.image('char2', 'Char2.png');
       }
 
       create() {
         this.graphics = this.add.graphics();
         this.drawGrid();
 
-        unitsData.forEach((u, index) => {
+        unitsData.forEach(u => {
           const container = this.add.container(u.x * TILE_SIZE + TILE_SIZE / 2, u.y * TILE_SIZE + TILE_SIZE / 2);
-          
-          // Lấy khung hình đầu tiên (frame 0) làm hình đại diện đứng yên trên bản đồ
-          const spriteKey = index === 0 ? 'char1' : 'char2';
-          const sprite = this.add.sprite(0, 0, spriteKey, 0);
-          sprite.setScale(1.2);
+          const bg = this.add.rectangle(0, 0, 38, 38, u.color, 0.9);
+          bg.setStrokeStyle(2, u.borderColor);
+          const label = this.add.text(0, 0, u.team === 'player' ? 'P' : 'E', { 
+            fontSize: '18px', fill: '#fff', fontStyle: 'bold', fontFamily: 'monospace' 
+          }).setOrigin(0.5);
 
-          if (u.team === 'enemy') {
-            sprite.setTint(0xff9999); // Ám đỏ nhẹ cho địch
-          }
-
-          // Thanh HP bên dưới
           const hpBarBg = this.add.rectangle(0, 22, 36, 4, 0x000000);
           const hpBar = this.add.rectangle(-18, 22, 36, 4, 0x2ecc71).setOrigin(0, 0.5);
 
-          container.add([sprite, hpBarBg, hpBar]);
+          container.add([bg, label, hpBarBg, hpBar]);
           u.sprite = container;
           u.hpBar = hpBar;
         });
@@ -160,7 +199,7 @@
           if (clickedUnit && clickedUnit.team === 'enemy') {
             const dist = Math.abs(selectedUnit.x - clickedUnit.x) + Math.abs(selectedUnit.y - clickedUnit.y);
             if (dist === 1) {
-              this.executeCombat(selectedUnit, clickedUnit);
+              this.startBattlePopup(selectedUnit, clickedUnit);
               selectedUnit = null;
               moveTiles = [];
               this.drawGrid();
@@ -195,24 +234,59 @@
         }
       }
 
-      executeCombat(att, def) {
+      // Kích hoạt khung giao tranh mô phỏng FE8 GBA
+      startBattlePopup(att, def) {
+        const popup = document.getElementById('battle-popup');
+        const attName = document.getElementById('bp-att-name');
+        const defName = document.getElementById('bp-def-name');
+        const attHp = document.getElementById('bp-att-hp');
+        const defHp = document.getElementById('bp-def-hp');
+        const sublog = document.getElementById('bp-sublog');
+
+        popup.style.display = 'flex';
+        attName.innerText = att.name;
+        defName.innerText = def.name;
+        attHp.innerText = `HP: ${att.hp}/${att.maxHp}`;
+        defHp.innerText = `HP: ${def.hp}/${def.maxHp}`;
+        sublog.innerHTML = `Bắt đầu giao tranh giữa ${att.name} và ${def.name}!`;
+
         const preview = calculateBattlePreview(att, def);
         logMsg(`--- GIAO TRANH: ${att.name} vs ${def.name} ---`);
-        logMsg(`${att.name}: Dmg ${preview.attacker.dmg} | Hit ${preview.attacker.hit}% | Crit ${preview.attacker.crit}% ${preview.attacker.double ? '(x2)' : ''}`);
 
-        this.performStrike(att, def, preview.attacker);
-
-        if (def.hp > 0) {
-          this.performStrike(def, att, preview.defender);
-        }
-
-        if (att.hp > 0 && def.hp > 0 && preview.attacker.double) {
-          logMsg(`${att.name} tốc độ cao, đánh bồi đòn 2!`);
-          this.performStrike(att, def, preview.attacker);
-        }
+        // Dùng thời gian trễ (setTimeout) để hiển thị lần lượt các đòn đánh như GBA thật
+        let step = 0;
+        const interval = setInterval(() => {
+          if (step === 0) {
+            // Lượt 1: Attacker đánh
+            sublog.innerHTML = `${att.name} ra đòn!`;
+            this.performStrike(att, def, preview.attacker, attHp, defHp, sublog);
+          } else if (step === 1) {
+            // Lượt 2: Defender phản công (nếu còn sống)
+            if (def.hp > 0) {
+              sublog.innerHTML = `${def.name} phản công!`;
+              this.performStrike(def, att, preview.defender, defHp, attHp, sublog);
+            } else {
+              sublog.innerHTML = `${def.name} đã gục ngã!`;
+            }
+          } else if (step === 2) {
+            // Lượt 3: Đòn bồi tốc độ (nếu có)
+            if (att.hp > 0 && def.hp > 0 && preview.attacker.double) {
+              sublog.innerHTML = `${att.name} đánh bồi đòn 2!`;
+              this.performStrike(att, def, preview.attacker, attHp, defHp, sublog);
+            }
+          } else {
+            // Kết thúc giao tranh sau 3 giây
+            clearInterval(interval);
+            setTimeout(() => {
+              popup.style.display = 'none';
+              logMsg(`Hoàn thành giao tranh.`);
+            }, 1200);
+          }
+          step++;
+        }, 1000);
       }
 
-      performStrike(att, def, stats) {
+      performStrike(att, def, stats, attHpUI, defHpUI, sublog) {
         if (roll2RN(stats.hit)) {
           const isCrit = (Math.random() * 100) < stats.crit;
           const finalDmg = isCrit ? stats.dmg * 3 : stats.dmg;
@@ -221,13 +295,23 @@
           const hpPercent = def.hp / def.maxHp;
           def.hpBar.setScale(Math.max(0, hpPercent), 1);
 
+          // Cập nhật giao diện trong popup giao tranh
+          if(att.team === 'player') {
+            defHpUI.innerText = `HP: ${def.hp}/${def.maxHp}`;
+          } else {
+            attHpUI.innerText = `HP: ${att.hp}/${att.maxHp}`;
+          }
+
           logMsg(`💥 ${att.name} trúng${isCrit ? ' CHÍ MẠNG' : ''}! ${def.name} -${finalDmg} HP (Còn ${def.hp}/${def.maxHp})`);
+          sublog.innerHTML = `💥 Trúng${isCrit ? ' CHÍ MẠNG' : ''}! -${finalDmg} HP`;
+
           if (def.hp === 0) {
             logMsg(`💀 ${def.name} đã gục ngã!`);
             def.sprite.setVisible(false);
           }
         } else {
           logMsg(`💨 ${att.name} đánh trượt!`);
+          sublog.innerHTML = `💨 Đánh trượt!`;
         }
       }
     }
