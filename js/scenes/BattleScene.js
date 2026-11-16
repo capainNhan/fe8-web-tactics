@@ -39,7 +39,7 @@ export class BattleScene extends Phaser.Scene {
     });
 
     this.animations = this.spriteManager.animations;
-  
+  }
 
   // ==========================================
   // PRELOAD
