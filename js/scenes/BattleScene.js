@@ -1,16 +1,27 @@
 
 import { TILE, GRID } from "../config.js";
 import { unitsData } from "../data/units.js";
-import { calculateBattlePreview, resolveStrike } from "../fe8Logic.js";
-import { autoSlice, getIdleFrame } from "../systems/spriteSheet.js";
+import {
+  calculateBattlePreview,
+  resolveStrike
+} from "../fe8Logic.js";
+import {
+  autoSlice,
+  getIdleFrame
+} from "../systems/spriteSheet.js";
 
 export class BattleScene extends Phaser.Scene {
   constructor() {
     super("BattleScene");
+
     this.selectedUnit = null;
     this.moveTiles = [];
     this.battleInProgress = false;
-    this.animations = { player: null, enemy: null };
+
+    this.animations = {
+      player: null,
+      enemy: null
+    };
   }
 
   preload() {
@@ -20,6 +31,7 @@ export class BattleScene extends Phaser.Scene {
 
   create() {
     this.graphics = this.add.graphics();
+
     this.drawGrid();
     this.createUnits();
     this.createBattleScreen();
@@ -31,11 +43,20 @@ export class BattleScene extends Phaser.Scene {
       const gx = Math.floor(p.x / TILE);
       const gy = Math.floor(p.y / TILE);
 
-      if (gx >= 0 && gx < GRID && gy >= 0 && gy < GRID) {
+      if (
+        gx >= 0 &&
+        gx < GRID &&
+        gy >= 0 &&
+        gy < GRID
+      ) {
         this.handleTileClick(gx, gy);
       }
     });
   }
+
+  // ==========================================
+  // SPRITE PREPARATION
+  // ==========================================
 
   async prepareSprites() {
     try {
@@ -52,16 +73,30 @@ export class BattleScene extends Phaser.Scene {
         this.textures.get("char2").getSourceImage()
       );
 
-      this.setFrame(this.attackerSprite, getIdleFrame(this.animations.player));
-      this.setFrame(this.defenderSprite, getIdleFrame(this.animations.enemy));
+      this.setFrame(
+        this.attackerSprite,
+        getIdleFrame(this.animations.player)
+      );
+
+      this.setFrame(
+        this.defenderSprite,
+        getIdleFrame(this.animations.enemy)
+      );
+
     } catch (error) {
-      console.error("Không thể chuẩn bị battle sprites:", error);
+      console.error(
+        "Không thể chuẩn bị battle sprites:",
+        error
+      );
+
       this.log("Lỗi tải hình ảnh chiến đấu.");
     }
   }
 
   loadTextureReady(key) {
-    if (this.textures.exists(key)) return Promise.resolve();
+    if (this.textures.exists(key)) {
+      return Promise.resolve();
+    }
 
     return new Promise((resolve, reject) => {
       const onComplete = file => {
@@ -79,15 +114,34 @@ export class BattleScene extends Phaser.Scene {
       };
 
       const cleanup = () => {
-        this.load.off(Phaser.Loader.Events.FILE_COMPLETE, onComplete);
-        this.load.off(Phaser.Loader.Events.LOAD_ERROR, onError);
+        this.load.off(
+          Phaser.Loader.Events.FILE_COMPLETE,
+          onComplete
+        );
+
+        this.load.off(
+          Phaser.Loader.Events.LOAD_ERROR,
+          onError
+        );
       };
 
-      this.load.on(Phaser.Loader.Events.FILE_COMPLETE, onComplete);
-      this.load.on(Phaser.Loader.Events.LOAD_ERROR, onError);
+      this.load.on(
+        Phaser.Loader.Events.FILE_COMPLETE,
+        onComplete
+      );
+
+      this.load.on(
+        Phaser.Loader.Events.LOAD_ERROR,
+        onError
+      );
+
       this.load.start();
     });
   }
+
+  // ==========================================
+  // MAP
+  // ==========================================
 
   drawGrid() {
     this.graphics.clear();
@@ -95,17 +149,38 @@ export class BattleScene extends Phaser.Scene {
     for (let y = 0; y < GRID; y++) {
       for (let x = 0; x < GRID; x++) {
         this.graphics.fillStyle(
-          (x + y) % 2 === 0 ? 0x22223b : 0x2a2a4a
+          (x + y) % 2 === 0
+            ? 0x22223b
+            : 0x2a2a4a
         );
-        this.graphics.fillRect(x * TILE, y * TILE, TILE, TILE);
+
+        this.graphics.fillRect(
+          x * TILE,
+          y * TILE,
+          TILE,
+          TILE
+        );
+
         this.graphics.lineStyle(1, 0x44445a);
-        this.graphics.strokeRect(x * TILE, y * TILE, TILE, TILE);
+
+        this.graphics.strokeRect(
+          x * TILE,
+          y * TILE,
+          TILE,
+          TILE
+        );
       }
     }
 
     this.moveTiles.forEach(t => {
       this.graphics.fillStyle(0x2ecc71, 0.4);
-      this.graphics.fillRect(t.x * TILE, t.y * TILE, TILE, TILE);
+
+      this.graphics.fillRect(
+        t.x * TILE,
+        t.y * TILE,
+        TILE,
+        TILE
+      );
     });
   }
 
@@ -117,22 +192,47 @@ export class BattleScene extends Phaser.Scene {
       );
 
       const circle = this.add.circle(
-        0, 0, 18,
-        u.team === "player" ? 0x3498db : 0xe74c3c
+        0,
+        0,
+        18,
+        u.team === "player"
+          ? 0x3498db
+          : 0xe74c3c
       );
 
       const label = this.add.text(
-        -7, -9,
+        -7,
+        -9,
         u.team === "player" ? "P" : "E",
-        { fontSize: "15px", color: "#fff" }
+        {
+          fontSize: "15px",
+          color: "#fff"
+        }
       );
 
-      const hpBG = this.add.rectangle(0, 20, 32, 5, 0x000000);
+      const hpBG = this.add.rectangle(
+        0,
+        20,
+        32,
+        5,
+        0x000000
+      );
+
       const hpBar = this.add.rectangle(
-        -16, 20, 32, 5, 0x22c55e
+        -16,
+        20,
+        32,
+        5,
+        0x22c55e
       ).setOrigin(0, 0.5);
 
-      c.add([circle, label, hpBG, hpBar]);
+      c.add([
+        circle,
+        label,
+        hpBG,
+        hpBar
+      ]);
+
       u.sprite = c;
       u.hpBar = hpBar;
     });
@@ -140,9 +240,13 @@ export class BattleScene extends Phaser.Scene {
 
   handleTileClick(gx, gy) {
     const target = unitsData.find(
-      u => u.x === gx && u.y === gy && u.hp > 0
+      u =>
+        u.x === gx &&
+        u.y === gy &&
+        u.hp > 0
     );
 
+    // Chọn đơn vị người chơi.
     if (target && target.team === "player") {
       this.selectedUnit = target;
       this.moveTiles = [];
@@ -160,30 +264,44 @@ export class BattleScene extends Phaser.Scene {
 
       this.drawGrid();
       this.log("Đã chọn " + target.name);
+
       return;
     }
 
     if (!this.selectedUnit) return;
 
-    if (target && target.team === "enemy") {
-      if (
+    // Tấn công cận chiến.
+    if (
+      target &&
+      target.team === "enemy"
+    ) {
+      const distance =
         Math.abs(this.selectedUnit.x - target.x) +
-        Math.abs(this.selectedUnit.y - target.y) === 1
-      ) {
+        Math.abs(this.selectedUnit.y - target.y);
+
+      if (distance === 1) {
         const atk = this.selectedUnit;
+
         this.selectedUnit = null;
         this.moveTiles = [];
+
         this.drawGrid();
+
         this.startBattle(atk, target);
+
         return;
       }
     }
 
+    // Di chuyển.
     if (
-      this.moveTiles.some(t => t.x === gx && t.y === gy) &&
+      this.moveTiles.some(
+        t => t.x === gx && t.y === gy
+      ) &&
       !target
     ) {
       const u = this.selectedUnit;
+
       u.x = gx;
       u.y = gy;
 
@@ -196,10 +314,16 @@ export class BattleScene extends Phaser.Scene {
 
       this.selectedUnit = null;
       this.moveTiles = [];
+
       this.drawGrid();
+
       this.log(u.name + " đã di chuyển.");
     }
   }
+
+  // ==========================================
+  // BATTLE SCREEN
+  // ==========================================
 
   createBattleScreen() {
     this.battleUI = this.add.container(0, 0)
@@ -207,39 +331,74 @@ export class BattleScene extends Phaser.Scene {
       .setVisible(false);
 
     this.battleUI.add([
-      this.add.rectangle(192, 192, 384, 384, 0x101522),
-      this.add.rectangle(192, 90, 384, 180, 0x263b55),
-      this.add.rectangle(192, 285, 384, 198, 0x182337),
-      this.add.rectangle(192, 318, 384, 5, 0x8c9a9e)
+      this.add.rectangle(
+        192, 192, 384, 384, 0x101522
+      ),
+
+      this.add.rectangle(
+        192, 90, 384, 180, 0x263b55
+      ),
+
+      this.add.rectangle(
+        192, 285, 384, 198, 0x182337
+      ),
+
+      this.add.rectangle(
+        192, 318, 384, 5, 0x8c9a9e
+      )
     ]);
 
-    this.attackerSprite = this.add.image(110, 316, "char1")
+    this.attackerSprite = this.add.image(
+      110, 316, "char1"
+    )
       .setOrigin(0.5, 1)
       .setScale(1.7)
       .setFlipX(true);
 
-    this.defenderSprite = this.add.image(275, 316, "char2")
+    this.defenderSprite = this.add.image(
+      275, 316, "char2"
+    )
       .setOrigin(0.5, 1)
       .setScale(1.7);
 
     this.attackerName = this.add.text(
-      18, 43, "",
-      { fontSize: "13px", color: "#38bdf8" }
+      18,
+      43,
+      "",
+      {
+        fontSize: "13px",
+        color: "#38bdf8"
+      }
     );
 
     this.defenderName = this.add.text(
-      366, 43, "",
-      { fontSize: "13px", color: "#f87171" }
+      366,
+      43,
+      "",
+      {
+        fontSize: "13px",
+        color: "#f87171"
+      }
     ).setOrigin(1, 0);
 
     this.attackerHPText = this.add.text(
-      18, 62, "",
-      { fontSize: "12px", color: "#fff" }
+      18,
+      62,
+      "",
+      {
+        fontSize: "12px",
+        color: "#fff"
+      }
     );
 
     this.defenderHPText = this.add.text(
-      366, 62, "",
-      { fontSize: "12px", color: "#fff" }
+      366,
+      62,
+      "",
+      {
+        fontSize: "12px",
+        color: "#fff"
+      }
     ).setOrigin(1, 0);
 
     this.attackerBar = this.add.rectangle(
@@ -251,7 +410,9 @@ export class BattleScene extends Phaser.Scene {
     ).setOrigin(0, 0.5);
 
     this.battleMessage = this.add.text(
-      192, 350, "BATTLE START!",
+      192,
+      350,
+      "BATTLE START!",
       {
         fontSize: "13px",
         color: "#facc15",
@@ -267,24 +428,40 @@ export class BattleScene extends Phaser.Scene {
       this.defenderName,
       this.attackerHPText,
       this.defenderHPText,
-      this.add.rectangle(18, 84, 145, 9, 0x111111)
-        .setOrigin(0, 0.5),
-      this.add.rectangle(221, 84, 145, 9, 0x111111)
-        .setOrigin(0, 0.5),
+
+      this.add.rectangle(
+        18, 84, 145, 9, 0x111111
+      ).setOrigin(0, 0.5),
+
+      this.add.rectangle(
+        221, 84, 145, 9, 0x111111
+      ).setOrigin(0, 0.5),
+
       this.attackerBar,
       this.defenderBar,
       this.battleMessage
     ]);
   }
 
+  // ==========================================
+  // SPRITE FRAME
+  // ==========================================
+
   setFrame(sprite, frame) {
     if (!frame || !sprite) return;
 
-    const key = sprite === this.attackerSprite ? "char1" : "char2";
+    const key =
+      sprite === this.attackerSprite
+        ? "char1"
+        : "char2";
+
     const tKey = [
-      "clean", key,
-      frame.x, frame.y,
-      frame.w, frame.h
+      "clean",
+      key,
+      frame.x,
+      frame.y,
+      frame.w,
+      frame.h
     ].join("_");
 
     if (this.textures.exists(tKey)) {
@@ -292,7 +469,10 @@ export class BattleScene extends Phaser.Scene {
       return;
     }
 
-    const src = this.textures.get(key).getSourceImage();
+    const src = this.textures
+      .get(key)
+      .getSourceImage();
+
     const cv = document.createElement("canvas");
 
     cv.width = frame.w;
@@ -302,14 +482,21 @@ export class BattleScene extends Phaser.Scene {
 
     ctx.drawImage(
       src,
-      frame.x, frame.y,
-      frame.w, frame.h,
-      0, 0,
-      frame.w, frame.h
+      frame.x,
+      frame.y,
+      frame.w,
+      frame.h,
+      0,
+      0,
+      frame.w,
+      frame.h
     );
 
     const imgData = ctx.getImageData(
-      0, 0, frame.w, frame.h
+      0,
+      0,
+      frame.w,
+      frame.h
     );
 
     const d = imgData.data;
@@ -332,7 +519,9 @@ export class BattleScene extends Phaser.Scene {
       let has = false;
 
       for (let x = 0; x < frame.w; x++) {
-        if (d[(y * frame.w + x) * 4 + 3] > 0) {
+        if (
+          d[(y * frame.w + x) * 4 + 3] > 0
+        ) {
           has = true;
           break;
         }
@@ -342,12 +531,16 @@ export class BattleScene extends Phaser.Scene {
         foot = true;
         gap = 0;
         bot = y + 1;
+
       } else if (foot && ++gap >= 4) {
         for (let cy = y; cy < frame.h; cy++) {
           for (let cx = 0; cx < frame.w; cx++) {
-            d[(cy * frame.w + cx) * 4 + 3] = 0;
+            d[
+              (cy * frame.w + cx) * 4 + 3
+            ] = 0;
           }
         }
+
         break;
       }
     }
@@ -355,13 +548,24 @@ export class BattleScene extends Phaser.Scene {
     ctx.putImageData(imgData, 0, 0);
 
     const fcv = document.createElement("canvas");
+
     fcv.width = frame.w;
     fcv.height = Math.max(1, bot);
 
-    fcv.getContext("2d").drawImage(cv, 0, 0);
+    fcv.getContext("2d").drawImage(
+      cv,
+      0,
+      0
+    );
+
     this.textures.addCanvas(tKey, fcv);
+
     sprite.setTexture(tKey);
   }
+
+  // ==========================================
+  // ANIMATION
+  // ==========================================
 
   async playFrames(sprite, list, delay = 65) {
     if (!list?.length) return;
@@ -378,6 +582,10 @@ export class BattleScene extends Phaser.Scene {
     });
   }
 
+  // ==========================================
+  // SAFE TWEEN
+  // ==========================================
+
   runTween(config, timeout = 1500) {
     return new Promise(resolve => {
       let finished = false;
@@ -386,13 +594,18 @@ export class BattleScene extends Phaser.Scene {
 
       const originalComplete = config.onComplete;
       const originalStop = config.onStop;
-      const callbackScope = config.callbackScope || this;
+
+      const callbackScope =
+        config.callbackScope || this;
 
       const finish = (callback, ...args) => {
         if (finished) return;
+
         finished = true;
 
-        if (timer) timer.remove();
+        if (timer) {
+          timer.remove();
+        }
 
         try {
           if (typeof callback === "function") {
@@ -415,26 +628,45 @@ export class BattleScene extends Phaser.Scene {
         }
       });
 
-      timer = this.time.delayedCall(timeout, () => {
-        if (!finished && tween) tween.stop();
-        finish();
-      });
+      timer = this.time.delayedCall(
+        timeout,
+        () => {
+          if (!finished && tween) {
+            tween.stop();
+          }
+
+          finish();
+        }
+      );
     });
   }
 
+  // ==========================================
+  // HIT STOP
+  // ==========================================
+
   async hitStop(duration = 45) {
-    // Dừng chuyển động tween trong khoảnh khắc va chạm.
     this.tweens.pauseAll();
 
     try {
-      // Clock của Phaser vẫn chạy nên không gây deadlock.
       await this.wait(duration);
+
     } finally {
       this.tweens.resumeAll();
     }
   }
 
-  async hitEffect(sprite, startX, isLeft, crit, dead) {
+  // ==========================================
+  // HIT EFFECT
+  // ==========================================
+
+  async hitEffect(
+    sprite,
+    startX,
+    isLeft,
+    crit,
+    dead
+  ) {
     sprite.setTintFill(0xffffff);
 
     const flashDuration = crit ? 45 : 35;
@@ -445,6 +677,7 @@ export class BattleScene extends Phaser.Scene {
       alpha: 0.65,
       duration: flashDuration,
       yoyo: true,
+
       onComplete: () => {
         sprite.setAlpha(1);
         sprite.clearTint();
@@ -453,14 +686,23 @@ export class BattleScene extends Phaser.Scene {
 
     const recoil = this.runTween({
       targets: sprite,
-      x: startX + (isLeft ? recoilDistance : -recoilDistance),
+
+      x: startX + (
+        isLeft
+          ? recoilDistance
+          : -recoilDistance
+      ),
+
       duration: crit ? 75 : 60,
       yoyo: true,
       ease: "Quad.easeOut"
     }, 400);
 
     if (dead) {
-      await Promise.all([flash, recoil]);
+      await Promise.all([
+        flash,
+        recoil
+      ]);
 
       await this.runTween({
         targets: sprite,
@@ -468,26 +710,45 @@ export class BattleScene extends Phaser.Scene {
         duration: 220,
         ease: "Quad.easeIn"
       }, 500);
+
     } else {
-      await Promise.all([flash, recoil]);
+      await Promise.all([
+        flash,
+        recoil
+      ]);
     }
 
     sprite.setAlpha(1);
     sprite.clearTint();
   }
 
+  // ==========================================
+  // UPDATE HP UI
+  // ==========================================
+
   updateBattleHP(a, d) {
-    this.attackerHPText.setText(`HP ${a.hp}/${a.maxHp}`);
-    this.defenderHPText.setText(`HP ${d.hp}/${d.maxHp}`);
+    this.attackerHPText.setText(
+      `HP ${a.hp}/${a.maxHp}`
+    );
+
+    this.defenderHPText.setText(
+      `HP ${d.hp}/${d.maxHp}`
+    );
 
     this.attackerBar.width = Math.max(
-      0, 145 * a.hp / a.maxHp
+      0,
+      145 * a.hp / a.maxHp
     );
 
     this.defenderBar.width = Math.max(
-      0, 145 * d.hp / d.maxHp
+      0,
+      145 * d.hp / d.maxHp
     );
   }
+
+  // ==========================================
+  // BATTLE RUNTIME
+  // ==========================================
 
   async startBattle(atk, def) {
     if (this.battleInProgress) return;
@@ -496,6 +757,7 @@ export class BattleScene extends Phaser.Scene {
 
     try {
       this.battleUI.setVisible(true);
+
       atk.sprite.setVisible(false);
       def.sprite.setVisible(false);
 
@@ -523,46 +785,79 @@ export class BattleScene extends Phaser.Scene {
 
       this.attackerName.setText(atk.name);
       this.defenderName.setText(def.name);
+
       this.battleMessage.setText("GIAO CHIẾN!");
 
       this.updateBattleHP(atk, def);
-      this.log(`=== ${atk.name} VS ${def.name} ===`);
+
+      this.log(
+        `=== ${atk.name} VS ${def.name} ===`
+      );
 
       await this.wait(350);
 
       const pv = calculateBattlePreview(atk, def);
 
+      // 1. Bên chủ động tấn công trước.
       await this.performStrike(
-        atk, def, pv.attacker,
+        atk,
+        def,
+        pv.attacker,
         this.attackerSprite,
         this.defenderSprite,
         this.animations.player
       );
 
-      if (def.hp > 0 && atk.hp > 0) {
+      // 2. Đối thủ phản công nếu cả hai còn sống.
+      if (
+        def.hp > 0 &&
+        atk.hp > 0 &&
+        def.weapon
+      ) {
         await this.performStrike(
-          def, atk, pv.defender,
+          def,
+          atk,
+          pv.defender,
           this.defenderSprite,
           this.attackerSprite,
           this.animations.enemy
         );
       }
 
-      if (
-        atk.hp > 0 &&
-        def.hp > 0 &&
-        pv.attacker.double
-      ) {
-        this.battleMessage.setText(`${atk.name} ĐÁNH BỒI!`);
+      // 3. Bên có AS cao hơn ít nhất 4 điểm
+      // được đánh bồi sau đòn phản công.
+      if (atk.hp > 0 && def.hp > 0) {
+        if (pv.attacker.double) {
+          this.battleMessage.setText(
+            `${atk.name} ĐÁNH BỒI!`
+          );
 
-        await this.performStrike(
-          atk, def, pv.attacker,
-          this.attackerSprite,
-          this.defenderSprite,
-          this.animations.player
-        );
+          await this.performStrike(
+            atk,
+            def,
+            pv.attacker,
+            this.attackerSprite,
+            this.defenderSprite,
+            this.animations.player
+          );
+
+        } else if (pv.defender.double) {
+          this.battleMessage.setText(
+            `${def.name} ĐÁNH BỒI!`
+          );
+
+          await this.performStrike(
+            def,
+            atk,
+            pv.defender,
+            this.defenderSprite,
+            this.attackerSprite,
+            this.animations.enemy
+          );
+        }
       }
 
+      // 4. Kết quả trận đấu.
       this.battleMessage.setText(
         def.hp <= 0
           ? def.name + " GỤC NGÃ!"
@@ -574,8 +869,14 @@ export class BattleScene extends Phaser.Scene {
       await this.wait(650);
 
     } catch (error) {
-      console.error("Battle Runtime error:", error);
-      this.log("Có lỗi trong trận đấu. Đã khôi phục trạng thái.");
+      console.error(
+        "Battle Runtime error:",
+        error
+      );
+
+      this.log(
+        "Có lỗi trong trận đấu. Đã khôi phục trạng thái."
+      );
 
     } finally {
       this.tweens.resumeAll();
@@ -596,31 +897,54 @@ export class BattleScene extends Phaser.Scene {
 
       if (atk.hp > 0) {
         atk.sprite.setVisible(true);
-        atk.hpBar.width = 32 * (atk.hp / atk.maxHp);
+
+        atk.hpBar.width =
+          32 * (atk.hp / atk.maxHp);
+
       } else {
         atk.sprite.setVisible(false);
       }
 
       if (def.hp > 0) {
         def.sprite.setVisible(true);
-        def.hpBar.width = 32 * (def.hp / def.maxHp);
+
+        def.hpBar.width =
+          32 * (def.hp / def.maxHp);
+
       } else {
         def.sprite.setVisible(false);
       }
 
       this.battleInProgress = false;
+
       this.drawGrid();
+
       this.log("=== KẾT THÚC GIAO TRANH ===");
     }
   }
 
-  async performStrike(atk, def, stats, atkSp, defSp, anim) {
+  // ==========================================
+  // SINGLE STRIKE
+  // ==========================================
+
+  async performStrike(
+    atk,
+    def,
+    stats,
+    atkSp,
+    defSp,
+    anim
+  ) {
     const startX = atkSp.x;
     const defenderStartX = defSp.x;
-    const isLeft = startX < defenderStartX;
-    const targetX = defenderStartX + (isLeft ? -55 : 55);
 
-    // Tính kết quả trên bản sao, chưa thay đổi HP thật.
+    const isLeft = startX < defenderStartX;
+
+    const targetX =
+      defenderStartX + (isLeft ? -55 : 55);
+
+    // Tính kết quả trên bản sao.
+    // Không thay đổi HP thật tại đây.
     const result = resolveStrike(
       { ...atk },
       { ...def },
@@ -628,12 +952,17 @@ export class BattleScene extends Phaser.Scene {
     );
 
     const rows = anim || [];
+
     const r0 = rows[0]?.frames || [];
     const r1 = rows[1]?.frames || [];
     const r2 = rows[2]?.frames || [];
     const r3 = rows[3]?.frames || [];
 
-    // 0: idle/windup, 1: attack, 2: critical, 3: dodge.
+    // 0: idle/windup
+    // 1: attack
+    // 2: critical
+    // 3: dodge
+
     const attackFrames = (
       result.crit && r2.length
         ? r2.slice(0, 10)
@@ -642,7 +971,11 @@ export class BattleScene extends Phaser.Scene {
 
     try {
       // Windup.
-      await this.playFrames(atkSp, r0.slice(1, 5), 45);
+      await this.playFrames(
+        atkSp,
+        r0.slice(1, 5),
+        45
+      );
 
       // Di chuyển và animation chạy song song.
       const movement = this.runTween({
@@ -658,17 +991,22 @@ export class BattleScene extends Phaser.Scene {
         55
       );
 
-      // Chọn thời điểm va chạm trong animation.
+      // Xác định thời điểm va chạm.
       const impactFrame = Math.min(
         2,
         Math.max(0, attackFrames.length - 1)
       );
 
-      await this.wait(impactFrame * 55 + 30);
+      await this.wait(
+        impactFrame * 55 + 30
+      );
 
       if (result.hit) {
-        // HP chỉ bị trừ một lần tại đây.
-        def.hp = Math.max(0, def.hp - result.damage);
+        // HP chỉ trừ đúng một lần tại đây.
+        def.hp = Math.max(
+          0,
+          def.hp - result.damage
+        );
 
         this.battleMessage.setText(
           result.crit
@@ -676,8 +1014,10 @@ export class BattleScene extends Phaser.Scene {
             : `${atk.name} TRÚNG ĐÒN!`
         );
 
-        // Hit-stop ngắn.
-        await this.hitStop(result.crit ? 65 : 45);
+        // Hit-stop.
+        await this.hitStop(
+          result.crit ? 65 : 45
+        );
 
         // Rung màn hình.
         this.cameras.main.shake(
@@ -701,28 +1041,43 @@ export class BattleScene extends Phaser.Scene {
         );
 
         if (def.hp <= 0) {
-          this.log(def.name + " đã bị hạ gục!");
+          this.log(
+            def.name + " đã bị hạ gục!"
+          );
         }
 
       } else {
-        this.battleMessage.setText(atk.name + " ĐÁNH TRƯỢT!");
-        this.log(atk.name + " đánh trượt!");
+        this.battleMessage.setText(
+          atk.name + " ĐÁNH TRƯỢT!"
+        );
+
+        this.log(
+          atk.name + " đánh trượt!"
+        );
 
         // Hàng 3 là animation né.
         if (r3.length) {
-          await this.playFrames(defSp, r3.slice(0, 4), 40);
+          await this.playFrames(
+            defSp,
+            r3.slice(0, 4),
+            40
+          );
         }
 
         await this.runTween({
           targets: defSp,
-          x: defenderStartX + (isLeft ? 22 : -22),
+
+          x: defenderStartX + (
+            isLeft ? 22 : -22
+          ),
+
           duration: 110,
           yoyo: true,
           ease: "Quad.easeOut"
         }, 400);
       }
 
-      // Đợi chuyển động và animation tấn công hoàn tất.
+      // Đợi cả animation và chuyển động hoàn tất.
       await Promise.all([
         attackAnimation,
         movement
@@ -739,7 +1094,9 @@ export class BattleScene extends Phaser.Scene {
         ease: "Power2"
       }, 900);
 
-      atkSp.setAlpha(1).clearTint();
+      atkSp
+        .setAlpha(1)
+        .clearTint();
 
       if (atk.hp > 0) {
         this.setFrame(
@@ -749,19 +1106,27 @@ export class BattleScene extends Phaser.Scene {
       }
 
       if (def.hp > 0) {
-        defSp.setAlpha(1).clearTint();
+        defSp
+          .setAlpha(1)
+          .clearTint();
       }
 
       this.updateBattleHP(atk, def);
+
       await this.wait(80);
     }
   }
+
+  // ==========================================
+  // BATTLE LOG
+  // ==========================================
 
   log(message) {
     const box = document.getElementById("log-box");
 
     if (box) {
       box.innerHTML += "<br>> " + message;
+
       box.scrollTop = box.scrollHeight;
     }
   }
