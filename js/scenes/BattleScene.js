@@ -27,6 +27,7 @@ export class BattleScene extends Phaser.Scene {
 
     this.input.on("pointerdown", p => {
       if (this.battleInProgress) return;
+
       const gx = Math.floor(p.x / TILE);
       const gy = Math.floor(p.y / TILE);
 
@@ -377,25 +378,41 @@ export class BattleScene extends Phaser.Scene {
     });
   }
 
-  // Tween có timeout và xử lý cả trường hợp bị stop.
   runTween(config, timeout = 1500) {
     return new Promise(resolve => {
       let finished = false;
       let tween;
       let timer;
 
-      const finish = () => {
+      const originalComplete = config.onComplete;
+      const originalStop = config.onStop;
+      const callbackScope = config.callbackScope || this;
+
+      const finish = (callback, ...args) => {
         if (finished) return;
         finished = true;
 
         if (timer) timer.remove();
-        resolve();
+
+        try {
+          if (typeof callback === "function") {
+            callback.apply(callbackScope, args);
+          }
+        } finally {
+          resolve();
+        }
       };
 
       tween = this.tweens.add({
         ...config,
-        onComplete: finish,
-        onStop: finish
+
+        onComplete: (...args) => {
+          finish(originalComplete, ...args);
+        },
+
+        onStop: (...args) => {
+          finish(originalStop, ...args);
+        }
       });
 
       timer = this.time.delayedCall(timeout, () => {
@@ -403,6 +420,60 @@ export class BattleScene extends Phaser.Scene {
         finish();
       });
     });
+  }
+
+  async hitStop(duration = 45) {
+    // Dừng chuyển động tween trong khoảnh khắc va chạm.
+    this.tweens.pauseAll();
+
+    try {
+      // Clock của Phaser vẫn chạy nên không gây deadlock.
+      await this.wait(duration);
+    } finally {
+      this.tweens.resumeAll();
+    }
+  }
+
+  async hitEffect(sprite, startX, isLeft, crit, dead) {
+    sprite.setTintFill(0xffffff);
+
+    const flashDuration = crit ? 45 : 35;
+    const recoilDistance = crit ? 17 : 11;
+
+    const flash = this.runTween({
+      targets: sprite,
+      alpha: 0.65,
+      duration: flashDuration,
+      yoyo: true,
+      onComplete: () => {
+        sprite.setAlpha(1);
+        sprite.clearTint();
+      }
+    }, 300);
+
+    const recoil = this.runTween({
+      targets: sprite,
+      x: startX + (isLeft ? recoilDistance : -recoilDistance),
+      duration: crit ? 75 : 60,
+      yoyo: true,
+      ease: "Quad.easeOut"
+    }, 400);
+
+    if (dead) {
+      await Promise.all([flash, recoil]);
+
+      await this.runTween({
+        targets: sprite,
+        alpha: 0,
+        duration: 220,
+        ease: "Quad.easeIn"
+      }, 500);
+    } else {
+      await Promise.all([flash, recoil]);
+    }
+
+    sprite.setAlpha(1);
+    sprite.clearTint();
   }
 
   updateBattleHP(a, d) {
@@ -482,9 +553,7 @@ export class BattleScene extends Phaser.Scene {
         def.hp > 0 &&
         pv.attacker.double
       ) {
-        this.battleMessage.setText(
-          `${atk.name} ĐÁNH BỒI!`
-        );
+        this.battleMessage.setText(`${atk.name} ĐÁNH BỒI!`);
 
         await this.performStrike(
           atk, def, pv.attacker,
@@ -509,7 +578,8 @@ export class BattleScene extends Phaser.Scene {
       this.log("Có lỗi trong trận đấu. Đã khôi phục trạng thái.");
 
     } finally {
-      // Luôn khôi phục UI và trạng thái trận đấu.
+      this.tweens.resumeAll();
+
       this.battleUI.setVisible(false);
 
       this.attackerSprite
@@ -550,7 +620,7 @@ export class BattleScene extends Phaser.Scene {
     const isLeft = startX < defenderStartX;
     const targetX = defenderStartX + (isLeft ? -55 : 55);
 
-    // Tính kết quả trên bản sao để không trừ HP trước va chạm.
+    // Tính kết quả trên bản sao, chưa thay đổi HP thật.
     const result = resolveStrike(
       { ...atk },
       { ...def },
@@ -561,8 +631,8 @@ export class BattleScene extends Phaser.Scene {
     const r0 = rows[0]?.frames || [];
     const r1 = rows[1]?.frames || [];
     const r2 = rows[2]?.frames || [];
+    const r3 = rows[3]?.frames || [];
 
-    // Giữ nguyên quy ước sprite sheet 4 hàng:
     // 0: idle/windup, 1: attack, 2: critical, 3: dodge.
     const attackFrames = (
       result.crit && r2.length
@@ -574,7 +644,7 @@ export class BattleScene extends Phaser.Scene {
       // Windup.
       await this.playFrames(atkSp, r0.slice(1, 5), 45);
 
-      // Chạy chuyển động và animation cùng lúc.
+      // Di chuyển và animation chạy song song.
       const movement = this.runTween({
         targets: atkSp,
         x: targetX,
@@ -585,41 +655,35 @@ export class BattleScene extends Phaser.Scene {
       const attackAnimation = this.playFrames(
         atkSp,
         attackFrames,
-        65
+        55
       );
 
-      // Thời điểm va chạm nằm trong lúc animation đang chạy.
+      // Chọn thời điểm va chạm trong animation.
       const impactFrame = Math.min(
         2,
         Math.max(0, attackFrames.length - 1)
       );
 
-      await this.wait(impactFrame * 65 + 35);
+      await this.wait(impactFrame * 55 + 30);
 
-      // Chỉ xử lý kết quả một lần tại thời điểm va chạm.
       if (result.hit) {
+        // HP chỉ bị trừ một lần tại đây.
         def.hp = Math.max(0, def.hp - result.damage);
 
         this.battleMessage.setText(
-          `${atk.name} ${
-            result.crit ? "CHÍ MẠNG x3!" : "TRÚNG ĐÒN!"
-          }`
+          result.crit
+            ? `${atk.name} CHÍ MẠNG!`
+            : `${atk.name} TRÚNG ĐÒN!`
         );
 
+        // Hit-stop ngắn.
+        await this.hitStop(result.crit ? 65 : 45);
+
+        // Rung màn hình.
         this.cameras.main.shake(
-          result.crit ? 220 : 120,
-          result.crit ? 0.02 : 0.01
+          result.crit ? 180 : 90,
+          result.crit ? 0.025 : 0.012
         );
-
-        defSp.setTintFill(0xffffff);
-
-        this.runTween({
-          targets: defSp,
-          x: defenderStartX + (isLeft ? 10 : -10),
-          duration: 60,
-          yoyo: true,
-          onComplete: () => defSp.clearTint()
-        }, 500);
 
         this.updateBattleHP(atk, def);
 
@@ -627,54 +691,55 @@ export class BattleScene extends Phaser.Scene {
           `${atk.name} đánh trúng ${def.name}, mất ${result.damage} HP.`
         );
 
-        if (def.hp <= 0) {
-          this.runTween({
-            targets: defSp,
-            alpha: 0,
-            duration: 250
-          }, 700);
+        // Hiệu ứng nhận sát thương.
+        await this.hitEffect(
+          defSp,
+          defenderStartX,
+          isLeft,
+          !!result.crit,
+          def.hp <= 0
+        );
 
+        if (def.hp <= 0) {
           this.log(def.name + " đã bị hạ gục!");
         }
 
       } else {
-        this.battleMessage.setText(
-          atk.name + " ĐÁNH TRƯỢT!"
-        );
-
+        this.battleMessage.setText(atk.name + " ĐÁNH TRƯỢT!");
         this.log(atk.name + " đánh trượt!");
 
-        // Hàng 3 là animation né nếu sprite sheet có dữ liệu.
-        const dodgeFrames = rows[3]?.frames || [];
-
-        if (dodgeFrames.length) {
-          this.playFrames(defSp, dodgeFrames.slice(0, 4), 45);
+        // Hàng 3 là animation né.
+        if (r3.length) {
+          await this.playFrames(defSp, r3.slice(0, 4), 40);
         }
 
-        this.runTween({
+        await this.runTween({
           targets: defSp,
-          x: defenderStartX + (isLeft ? 28 : -28),
-          duration: 140,
-          yoyo: true
-        }, 600);
+          x: defenderStartX + (isLeft ? 22 : -22),
+          duration: 110,
+          yoyo: true,
+          ease: "Quad.easeOut"
+        }, 400);
       }
 
-      // Chờ animation và chuyển động kết thúc song song.
+      // Đợi chuyển động và animation tấn công hoàn tất.
       await Promise.all([
         attackAnimation,
         movement
       ]);
 
     } finally {
+      this.tweens.resumeAll();
+
       // Trả người tấn công về vị trí ban đầu.
       await this.runTween({
         targets: atkSp,
         x: startX,
-        duration: 190,
+        duration: 170,
         ease: "Power2"
-      }, 1000);
+      }, 900);
 
-      atkSp.clearTint();
+      atkSp.setAlpha(1).clearTint();
 
       if (atk.hp > 0) {
         this.setFrame(
@@ -684,11 +749,11 @@ export class BattleScene extends Phaser.Scene {
       }
 
       if (def.hp > 0) {
-        defSp.setAlpha(1);
+        defSp.setAlpha(1).clearTint();
       }
 
       this.updateBattleHP(atk, def);
-      await this.wait(100);
+      await this.wait(80);
     }
   }
 
