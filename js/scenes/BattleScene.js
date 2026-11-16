@@ -1322,15 +1322,7 @@ export class BattleScene extends Phaser.Scene {
       );
 
       // Địch né đòn bằng chuyển động ngắn.
-      await this.runTween({
-        targets: defSp,
-        x: defenderStartX + (
-          isLeft ? 22 : -22
-        ),
-        duration: 110,
-        yoyo: true,
-        ease: "Quad.easeOut"
-      }, 400);
+      
     }
 
     // Chờ cả chuyển động và animation đánh hoàn tất.
@@ -1482,24 +1474,6 @@ export class BattleScene extends Phaser.Scene {
       this.log(
         atk.name + " đánh trượt!"
       );
-
-      if (r3.length) {
-        await this.playFrames(
-          defSp,
-          r3.slice(0, 4),
-          40
-        );
-      }
-
-      await this.runTween({
-        targets: defSp,
-        x: defenderStartX + (
-          isLeft ? 22 : -22
-        ),
-        duration: 110,
-        yoyo: true,
-        ease: "Quad.easeOut"
-      }, 400);
     }
 
     await Promise.all([
