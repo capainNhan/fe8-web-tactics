@@ -18,6 +18,11 @@ export class BattleScene extends Phaser.Scene {
     this.moveTiles = [];
     this.battleInProgress = false;
 
+    // TURN SYSTEM
+    this.turnNumber = 1;
+    this.turnPhase = "player";
+    this.turnTransitioning = false;
+
     this.animations = {
       player: null,
       enemy: null
@@ -30,15 +35,36 @@ export class BattleScene extends Phaser.Scene {
   }
 
   create() {
+    // Khởi tạo trạng thái lượt cho tất cả đơn vị.
+    this.resetUnitTurnStates();
+
     this.graphics = this.add.graphics();
 
     this.drawGrid();
     this.createUnits();
     this.createBattleScreen();
+    this.createTurnUI();
     this.prepareSprites();
 
     this.input.on("pointerdown", p => {
-      if (this.battleInProgress) return;
+      if (
+        this.battleInProgress ||
+        this.turnTransitioning
+      ) {
+        return;
+      }
+
+      // Không xử lý click bản đồ khi bấm nút kết thúc lượt.
+      if (
+        this.endTurnButton &&
+        this.endTurnButton.getBounds().contains(p.x, p.y)
+      ) {
+        return;
+      }
+
+      if (this.turnPhase !== "player") {
+        return;
+      }
 
       const gx = Math.floor(p.x / TILE);
       const gy = Math.floor(p.y / TILE);
@@ -52,6 +78,187 @@ export class BattleScene extends Phaser.Scene {
         this.handleTileClick(gx, gy);
       }
     });
+
+    this.updateTurnUI();
+    this.log("Lượt 1 - Phe người chơi.");
+  }
+
+  // ==========================================
+  // TURN SYSTEM
+  // ==========================================
+
+  resetUnitTurnStates() {
+    unitsData.forEach(unit => {
+      unit.hasMoved = false;
+      unit.hasActed = false;
+    });
+  }
+
+  canUnitMove(unit) {
+    return (
+      this.turnPhase === "player" &&
+      unit.team === "player" &&
+      unit.hp > 0 &&
+      !unit.hasMoved &&
+      !unit.hasActed
+    );
+  }
+
+  canUnitAct(unit) {
+    return (
+      this.turnPhase === "player" &&
+      unit.team === "player" &&
+      unit.hp > 0 &&
+      !unit.hasActed
+    );
+  }
+
+  createTurnUI() {
+    this.turnUI = this.add.container(0, 0)
+      .setDepth(2000);
+
+    this.turnLabel = this.add.text(
+      8,
+      8,
+      "",
+      {
+        fontSize: "12px",
+        color: "#ffffff",
+        backgroundColor: "#111827",
+        padding: {
+          x: 7,
+          y: 5
+        }
+      }
+    );
+
+    this.endTurnButton = this.add.text(
+      376,
+      8,
+      "KẾT THÚC LƯỢT",
+      {
+        fontSize: "11px",
+        color: "#ffffff",
+        backgroundColor: "#166534",
+        padding: {
+          x: 8,
+          y: 6
+        }
+      }
+    )
+      .setOrigin(1, 0)
+      .setInteractive({ useHandCursor: true });
+
+    this.endTurnButton.on("pointerdown", () => {
+      this.endPlayerTurn();
+    });
+
+    this.endTurnButton.on("pointerover", () => {
+      if (this.turnPhase === "player") {
+        this.endTurnButton.setBackgroundColor("#15803d");
+      }
+    });
+
+    this.endTurnButton.on("pointerout", () => {
+      this.endTurnButton.setBackgroundColor(
+        this.turnPhase === "player"
+          ? "#166534"
+          : "#4b5563"
+      );
+    });
+
+    this.turnUI.add([
+      this.turnLabel,
+      this.endTurnButton
+    ]);
+  }
+
+  updateTurnUI() {
+    if (!this.turnLabel || !this.endTurnButton) {
+      return;
+    }
+
+    const phaseText =
+      this.turnPhase === "player"
+        ? "LƯỢT NGƯỜI CHƠI"
+        : "LƯỢT ĐỊCH";
+
+    this.turnLabel.setText(
+      `LƯỢT ${this.turnNumber} - ${phaseText}`
+    );
+
+    const canEndTurn =
+      this.turnPhase === "player" &&
+      !this.battleInProgress &&
+      !this.turnTransitioning;
+
+    this.endTurnButton
+      .setAlpha(canEndTurn ? 1 : 0.55)
+      .setBackgroundColor(
+        canEndTurn
+          ? "#166534"
+          : "#4b5563"
+      );
+  }
+
+  async endPlayerTurn() {
+    if (
+      this.turnPhase !== "player" ||
+      this.battleInProgress ||
+      this.turnTransitioning
+    ) {
+      return;
+    }
+
+    this.turnTransitioning = true;
+
+    this.selectedUnit = null;
+    this.moveTiles = [];
+
+    this.drawGrid();
+    this.updateTurnUI();
+
+    try {
+      // Chuyển sang lượt địch.
+      this.turnPhase = "enemy";
+
+      this.updateTurnUI();
+
+      this.log("=== LƯỢT ĐỊCH BẮT ĐẦU ===");
+
+      // AI sẽ được tích hợp ở bước tiếp theo.
+      await this.wait(700);
+
+      this.log("Phe địch đã hoàn thành lượt.");
+
+      // Chuyển lại lượt người chơi.
+      this.turnNumber += 1;
+      this.turnPhase = "player";
+
+      this.resetUnitTurnStates();
+
+      this.log(
+        `=== LƯỢT ${this.turnNumber} - NGƯỜI CHƠI ===`
+      );
+
+    } catch (error) {
+      console.error("Turn transition error:", error);
+
+      this.turnPhase = "player";
+
+      this.log(
+        "Lỗi chuyển lượt. Đã khôi phục lượt người chơi."
+      );
+
+    } finally {
+      this.turnTransitioning = false;
+
+      this.selectedUnit = null;
+      this.moveTiles = [];
+
+      this.drawGrid();
+      this.updateTurnUI();
+    }
   }
 
   // ==========================================
@@ -238,7 +445,52 @@ export class BattleScene extends Phaser.Scene {
     });
   }
 
+  // ==========================================
+  // MOVEMENT RANGE
+  // ==========================================
+
+  getAvailableMoveTiles(unit) {
+    const tiles = [];
+
+    for (let y = 0; y < GRID; y++) {
+      for (let x = 0; x < GRID; x++) {
+        const distance =
+          Math.abs(unit.x - x) +
+          Math.abs(unit.y - y);
+
+        if (distance === 0 || distance > unit.mov) {
+          continue;
+        }
+
+        const occupied = unitsData.some(other =>
+          other !== unit &&
+          other.hp > 0 &&
+          other.x === x &&
+          other.y === y
+        );
+
+        if (!occupied) {
+          tiles.push({ x, y });
+        }
+      }
+    }
+
+    return tiles;
+  }
+
+  // ==========================================
+  // TILE INPUT
+  // ==========================================
+
   handleTileClick(gx, gy) {
+    if (
+      this.turnPhase !== "player" ||
+      this.battleInProgress ||
+      this.turnTransitioning
+    ) {
+      return;
+    }
+
     const target = unitsData.find(
       u =>
         u.x === gx &&
@@ -246,78 +498,136 @@ export class BattleScene extends Phaser.Scene {
         u.hp > 0
     );
 
-    // Chọn đơn vị người chơi.
-    if (target && target.team === "player") {
-      this.selectedUnit = target;
-      this.moveTiles = [];
+    // ----------------------------------------
+    // CHỌN ĐƠN VỊ NGƯỜI CHƠI
+    // ----------------------------------------
 
-      for (let y = 0; y < GRID; y++) {
-        for (let x = 0; x < GRID; x++) {
-          if (
-            Math.abs(target.x - x) +
-            Math.abs(target.y - y) <= target.mov
-          ) {
-            this.moveTiles.push({ x, y });
-          }
-        }
+    if (target && target.team === "player") {
+      if (!this.canUnitAct(target)) {
+        this.log(
+          target.name + " đã hoàn thành hành động lượt này."
+        );
+
+        return;
       }
 
+      this.selectedUnit = target;
+
+      this.moveTiles = this.canUnitMove(target)
+        ? this.getAvailableMoveTiles(target)
+        : [];
+
       this.drawGrid();
-      this.log("Đã chọn " + target.name);
+
+      if (target.hasMoved) {
+        this.log(
+          target.name + " đã di chuyển. Có thể tiếp tục tấn công."
+        );
+      } else {
+        this.log("Đã chọn " + target.name);
+      }
 
       return;
     }
 
-    if (!this.selectedUnit) return;
+    if (!this.selectedUnit) {
+      return;
+    }
 
-    // Tấn công cận chiến.
+    const attacker = this.selectedUnit;
+
+    if (!this.canUnitAct(attacker)) {
+      this.selectedUnit = null;
+      this.moveTiles = [];
+      this.drawGrid();
+      return;
+    }
+
+    // ----------------------------------------
+    // TẤN CÔNG KẺ ĐỊCH
+    // ----------------------------------------
+
     if (
       target &&
       target.team === "enemy"
     ) {
       const distance =
-        Math.abs(this.selectedUnit.x - target.x) +
-        Math.abs(this.selectedUnit.y - target.y);
+        Math.abs(attacker.x - target.x) +
+        Math.abs(attacker.y - target.y);
 
       if (distance === 1) {
-        const atk = this.selectedUnit;
+        // Đánh dấu đã hành động trước khi bắt đầu battle.
+        // Tránh việc lỗi animation khiến đơn vị được đánh lại.
+        attacker.hasActed = true;
 
         this.selectedUnit = null;
         this.moveTiles = [];
 
         this.drawGrid();
+        this.updateTurnUI();
 
-        this.startBattle(atk, target);
+        this.startBattle(attacker, target);
 
         return;
       }
+
+      this.log("Kẻ địch nằm ngoài tầm tấn công.");
+      return;
     }
 
-    // Di chuyển.
+    // ----------------------------------------
+    // DI CHUYỂN
+    // ----------------------------------------
+
     if (
+      this.canUnitMove(attacker) &&
       this.moveTiles.some(
-        t => t.x === gx && t.y === gy
+        tile => tile.x === gx && tile.y === gy
       ) &&
       !target
     ) {
-      const u = this.selectedUnit;
+      attacker.hasMoved = true;
 
-      u.x = gx;
-      u.y = gy;
+      attacker.x = gx;
+      attacker.y = gy;
+
+      this.moveTiles = [];
 
       this.tweens.add({
-        targets: u.sprite,
+        targets: attacker.sprite,
         x: gx * TILE + TILE / 2,
         y: gy * TILE + TILE / 2,
-        duration: 200
+        duration: 200,
+        ease: "Power2",
+        onComplete: () => {
+          this.log(
+            attacker.name +
+            " đã di chuyển. Có thể tiếp tục tấn công."
+          );
+        }
       });
 
-      this.selectedUnit = null;
-      this.moveTiles = [];
+      // Giữ đơn vị được chọn để người chơi có thể
+      // click vào kẻ địch ở ô liền kề để tấn công.
+      this.selectedUnit = attacker;
 
       this.drawGrid();
 
-      this.log(u.name + " đã di chuyển.");
+      return;
+    }
+
+    // ----------------------------------------
+    // CLICK Ô KHÔNG HỢP LỆ
+    // ----------------------------------------
+
+    if (
+      attacker.hasMoved &&
+      !attacker.hasActed
+    ) {
+      this.log(
+        attacker.name +
+        " đã di chuyển. Hãy chọn kẻ địch liền kề để tấn công."
+      );
     }
   }
 
@@ -754,6 +1064,7 @@ export class BattleScene extends Phaser.Scene {
     if (this.battleInProgress) return;
 
     this.battleInProgress = true;
+    this.updateTurnUI();
 
     try {
       this.battleUI.setVisible(true);
@@ -918,6 +1229,7 @@ export class BattleScene extends Phaser.Scene {
       this.battleInProgress = false;
 
       this.drawGrid();
+      this.updateTurnUI();
 
       this.log("=== KẾT THÚC GIAO TRANH ===");
     }
