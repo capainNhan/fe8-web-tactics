@@ -1,4 +1,4 @@
-
+import { SpriteAnimator } from "../systems/sprites/SpriteAnimator.js";
 import { TILE, GRID } from "../config.js";
 import { unitsData } from "../data/units.js";
 import {
@@ -43,6 +43,7 @@ export class BattleScene extends Phaser.Scene {
     this.char5Manifest = null;
     this.char5FrameTextures = new Map();
     this.char5Ready = false;
+    this.spriteAnimator = new SpriteAnimator(this);
   }
 
   // ==========================================
