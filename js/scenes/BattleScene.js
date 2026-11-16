@@ -293,30 +293,16 @@ export class BattleScene extends Phaser.Scene {
     }
 
   
-  createBattleScreen() {
-    this.battleUI = this.add.container(0, 0);
-    this.battleUI.setDepth(1000);
-
+    createBattleScreen() {
+    this.battleUI = this.add.container(0, 0).setDepth(1000);
     const bg = this.add.rectangle(192, 192, 384, 384, 0x101522);
     const upper = this.add.rectangle(192, 90, 384, 180, 0x263b55);
     const lower = this.add.rectangle(192, 285, 384, 198, 0x182337);
-    const ground = this.add.rectangle(192, 320, 384, 5, 0x8c9a9e);
-
+    const ground = this.add.rectangle(192, 318, 384, 5, 0x8c9a9e);
     this.battleUI.add([bg, upper, lower, ground]);
 
-    // Đặt chân 2 nhân vật chạm đúng vạch mặt đất (y = 318)
-    this.attackerSprite = this.add.image(110, 318, "char1")
-      .setOrigin(0.5, 1)
-      .setScale(1.6);
-
-    this.defenderSprite = this.add.image(280, 318, "char2")
-      .setOrigin(0.5, 1)
-      .setScale(1.6);
-
-    // Lật mặt nhân vật bên trái nhìn sang phải đối diện địch
-    this.attackerSprite.setFlipX(true);
-    this.defenderSprite.setFlipX(false);
-
+    this.attackerSprite = this.add.image(110, 316, "char1").setOrigin(0.5, 1).setScale(1.7).setFlipX(true);
+    this.defenderSprite = this.add.image(275, 316, "char2").setOrigin(0.5, 1).setScale(1.7).setFlipX(false);
     this.battleUI.add([this.attackerSprite, this.defenderSprite]);
 
     this.attackerName = this.add.text(18, 43, "", { fontSize: "13px", color: "#38bdf8" });
@@ -330,49 +316,153 @@ export class BattleScene extends Phaser.Scene {
     this.defenderBar = this.add.rectangle(221, 84, 145, 7, 0x22c55e).setOrigin(0, 0.5);
 
     this.battleMessage = this.add.text(192, 350, "BATTLE START!", {
-      fontSize: "13px",
-      color: "#facc15",
-      align: "center",
-      wordWrap: { width: 350 }
+      fontSize: "13px", color: "#facc15", align: "center", wordWrap: { width: 350 }
     }).setOrigin(0.5);
 
     this.battleUI.add([
-      this.attackerName, this.defenderName,
-      this.attackerHPText, this.defenderHPText,
-      this.attackerBarBG, this.defenderBarBG,
-      this.attackerBar, this.defenderBar,
-      this.battleMessage
+      this.attackerName, this.defenderName, this.attackerHPText, this.defenderHPText,
+      this.attackerBarBG, this.defenderBarBG, this.attackerBar, this.defenderBar, this.battleMessage
     ]);
-
     this.battleUI.setVisible(false);
   }
 
   setFrame(sprite, frame) {
     if (!frame) return;
-
     const sourceKey = sprite === this.attackerSprite ? "char1" : "char2";
     const textureKey = ["clean", sourceKey, frame.x, frame.y, frame.w, frame.h].join("_");
-
-    // Nếu khung hình đã được tách nền trước đó thì dùng lại ngay (tối ưu hiệu năng)
-    if (this.textures.exists(textureKey)) {
-      sprite.setTexture(textureKey);
-      return;
-    }
+    if (this.textures.exists(textureKey)) { sprite.setTexture(textureKey); return; }
 
     const source = this.textures.get(sourceKey).getSourceImage();
     const canvas = document.createElement("canvas");
-    canvas.width = frame.w;
-    canvas.height = frame.h;
+    canvas.width = frame.w; canvas.height = frame.h;
     const ctx = canvas.getContext("2d");
-
     ctx.drawImage(source, frame.x, frame.y, frame.w, frame.h, 0, 0, frame.w, frame.h);
 
     const imgData = ctx.getImageData(0, 0, frame.w, frame.h);
     const data = imgData.data;
-
-    // 1. Xóa sạch nền trắng (bao gồm cả nhiễu nén JPEG ở Char1.jpg)
     for (let i = 0; i < data.length; i += 4) {
-      if (data[i] > 230 && data[i + 1] > 230 && data[i + 2] > 230) {
+      if (data.at(i) > 230 && data.at(i + 1) > 230 && data.at(i + 2) > 230) data[i + 3] = 0;
+    }
+
+    let bodyBottom = frame.h, foundFoot = false, emptyRows = 0;
+    for (let y = 0; y < frame.h; y++) {
+      let rowHas = false;
+      for (let x = 0; x < frame.w; x++) {
+        if (data.at((y * frame.w + x) * 4 + 3) > 0) { rowHas = true; break; }
+      }
+      if (rowHas) { foundFoot = true; emptyRows = 0; bodyBottom = y + 1; }
+      else if (foundFoot && ++emptyRows >= 4) {
+        for (let cy = y; cy < frame.h; cy++)
+          for (let cx = 0; cx < frame.w; cx++) data[(cy * frame.w + cx) * 4 + 3] = 0;
+        break;
+      }
+    }
+    ctx.putImageData(imgData, 0, 0);
+
+    const finalCanvas = document.createElement("canvas");
+    finalCanvas.width = frame.w; finalCanvas.height = Math.max(1, bodyBottom);
+    finalCanvas.getContext("2d").drawImage(canvas, 0, 0);
+    this.textures.addCanvas(textureKey, finalCanvas);
+    sprite.setTexture(textureKey);
+  }
+
+  async playFrames(sprite, frames, delay = 65) {
+    if (!frames || !frames.length) return;
+    for (const f of frames) { this.setFrame(sprite, f); await this.wait(delay); }
+  }
+
+  wait(ms) { return new Promise(r => this.time.delayedCall(ms, r)); }
+
+  updateBattleHP(a, d) {
+    this.attackerHPText.setText(`HP ${a.hp}/${a.maxHp}`);
+    this.defenderHPText.setText(`HP ${d.hp}/${d.maxHp}`);
+    this.attackerBar.width = Math.max(0, 145 * a.hp / a.maxHp);
+    this.defenderBar.width = Math.max(0, 145 * d.hp / d.maxHp);
+  }
+
+  async startBattle(attacker, defender) {
+    if (this.battleInProgress) return;
+    this.battleInProgress = true;
+    this.battleUI.setVisible(true);
+    attacker.sprite.setVisible(false); defender.sprite.setVisible(false);
+
+    this.attackerSprite.setPosition(110, 316).setVisible(true).setAlpha(1).clearTint();
+    this.defenderSprite.setPosition(275, 316).setVisible(true).setAlpha(1).clearTint();
+    this.setFrame(this.attackerSprite, getIdleFrame(this.animations.player));
+    this.setFrame(this.defenderSprite, getIdleFrame(this.animations.enemy));
+
+    this.attackerName.setText(attacker.name);
+    this.defenderName.setText(defender.name);
+    this.battleMessage.setText("GIAO CHIẾN!");
+    this.updateBattleHP(attacker, defender);
+    this.log(`=== ${attacker.name} VS ${defender.name} ===`);
+    await this.wait(400);
+
+    const preview = calculateBattlePreview(attacker, defender);
+    await this.performStrike(attacker, defender, preview.attacker, this.attackerSprite, this.defenderSprite, this.animations.player);
+
+    if (defender.hp > 0 && attacker.hp > 0) {
+      await this.performStrike(defender, attacker, preview.defender, this.defenderSprite, this.attackerSprite, this.animations.enemy);
+    }
+    if (attacker.hp > 0 && defender.hp > 0 && preview.attacker.double) {
+      this.battleMessage.setText(`${attacker.name} ĐÁNH BỒI!`);
+      await this.performStrike(attacker, defender, preview.attacker, this.attackerSprite, this.defenderSprite, this.animations.player);
+    }
+
+    this.battleMessage.setText(defender.hp <= 0 ? defender.name + " GỤC NGÃ!" : attacker.hp <= 0 ? attacker.name + " GỤC NGÃ!" : "KẾT THÚC");
+    await this.wait(800);
+    this.battleUI.setVisible(false);
+
+    if (attacker.hp > 0) { attacker.sprite.setVisible(true); attacker.hpBar.width = 32 * (attacker.hp / attacker.maxHp); }
+    if (defender.hp > 0) { defender.sprite.setVisible(true); defender.hpBar.width = 32 * (defender.hp / defender.maxHp); }
+    this.battleInProgress = false;
+    this.drawGrid();
+    this.log("=== KẾT THÚC GIAO TRANH ===");
+  }
+
+  async performStrike(attacker, defender, stats, atkSp, defSp, animRows) {
+    const startX = atkSp.x, isLeft = startX < defSp.x;
+    const targetX = defSp.x + (isLeft ? -55 : 55);
+    const result = resolveStrike(attacker, defender, stats);
+
+    const r0 = animRows?.at(0)?.frames || [];
+    const r1 = animRows?.at(1)?.frames || [];
+    const r2 = animRows?.at(2)?.frames || [];
+    const slashFrames = (result.crit && r2.length) ? r2.slice(0, 10) : r1.slice(0, 6);
+
+    this.tweens.add({ targets: atkSp, x: targetX, duration: 220, ease: "Power2" });
+    await this.playFrames(atkSp, r0.slice(1, 6), 45);
+
+    const strikeAnim = this.playFrames(atkSp, slashFrames, 65);
+    await this.wait(120);
+
+    if (result.hit) {
+      this.battleMessage.setText(`${attacker.name} ${result.crit ? "CHÍ MẠNG x3!" : "TRÚNG ĐÒN!"}`);
+      this.cameras.main.shake(result.crit ? 220 : 120, result.crit ? 0.02 : 0.01);
+      defSp.setTintFill(0xffffff);
+      this.tweens.add({ targets: defSp, x: defSp.x + (isLeft ? 10 : -10), duration: 60, yoyo: true, onComplete: () => defSp.clearTint() });
+      this.updateBattleHP(attacker, defender);
+      this.log(`${attacker.name} đánh trúng ${defender.name}, mất ${result.damage} HP.`);
+      if (result.defeated) { this.tweens.add({ targets: defSp, alpha: 0, duration: 300 }); this.log(defender.name + " đã bị hạ gục!"); }
+    } else {
+      this.battleMessage.setText(attacker.name + " ĐÁNH TRƯỢT!");
+      this.log(attacker.name + " đánh trượt!");
+      this.tweens.add({ targets: defSp, x: defSp.x + (isLeft ? 28 : -28), duration: 140, yoyo: true });
+    }
+
+    await strikeAnim;
+    await this.wait(150);
+    await new Promise(r => this.tweens.add({ targets: atkSp, x: startX, duration: 200, onComplete: r }));
+    this.setFrame(atkSp, r0.at(0) || getIdleFrame(animRows));
+    await this.wait(250);
+  }
+
+  log(m) {
+    const b = document.getElementById("log-box");
+    if (b) { b.innerHTML += "<br>> " + m; b.scrollTop = b.scrollHeight; }
+  }
+}
+ && data[i + 2] > 230) {
         data[i + 3] = 0;
       }
     }
