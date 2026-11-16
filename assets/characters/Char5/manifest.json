@@ -1,0 +1,124 @@
+{
+  "format": "FE8_SPRITE_ANIMATION_V1",
+  "source": {
+    "file": "Char3",
+    "width": 522,
+    "height": 291
+  },
+  "frameDurationMs": 50,
+  "animations": {
+    "attack": {
+      "description": "Đứng yên → lấy đà → lao tới → đánh trúng",
+      "frames": [
+        "frame_006.png",
+        "frame_003.png",
+        "frame_003.png",
+        "frame_003.png",
+        "frame_003.png",
+        "frame_004.png",
+        "frame_004.png",
+        "frame_004.png",
+        "frame_005.png",
+        "frame_005.png",
+        "frame_005.png",
+        "frame_006.png"
+      ]
+    },
+    "return": {
+      "description": "Lui về vị trí ban đầu",
+      "frames": [
+        "frame_007.png",
+        "frame_007.png",
+        "frame_008.png",
+        "frame_010.png",
+        "frame_008.png",
+        "frame_008.png",
+        "frame_010.png",
+        "frame_010.png",
+        "frame_010.png"
+      ]
+    }
+  },
+  "frames": [
+    {
+      "id": 0,
+      "file": "frame_001.png",
+      "x": 1,
+      "y": 154,
+      "width": 41,
+      "height": 65
+    },
+    {
+      "id": 1,
+      "file": "frame_002.png",
+      "x": 45,
+      "y": 155,
+      "width": 39,
+      "height": 65
+    },
+    {
+      "id": 2,
+      "file": "frame_003.png",
+      "x": 84,
+      "y": 155,
+      "width": 44,
+      "height": 65
+    },
+    {
+      "id": 3,
+      "file": "frame_004.png",
+      "x": 130,
+      "y": 157,
+      "width": 43,
+      "height": 67
+    },
+    {
+      "id": 4,
+      "file": "frame_005.png",
+      "x": 259,
+      "y": 158,
+      "width": 61,
+      "height": 61
+    },
+    {
+      "id": 5,
+      "file": "frame_006.png",
+      "x": 327,
+      "y": 162,
+      "width": 55,
+      "height": 58
+    },
+    {
+      "id": 6,
+      "file": "frame_007.png",
+      "x": 171,
+      "y": 228,
+      "width": 42,
+      "height": 55
+    },
+    {
+      "id": 7,
+      "file": "frame_008.png",
+      "x": 386,
+      "y": 224,
+      "width": 46,
+      "height": 60
+    },
+    {
+      "id": 8,
+      "file": "frame_009.png",
+      "x": 0,
+      "y": 222,
+      "width": 9,
+      "height": 8
+    },
+    {
+      "id": 9,
+      "file": "frame_010.png",
+      "x": 2,
+      "y": 220,
+      "width": 41,
+      "height": 60
+    }
+  ]
+}
