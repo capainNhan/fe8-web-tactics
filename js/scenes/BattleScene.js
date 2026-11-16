@@ -290,160 +290,135 @@ export class BattleScene extends Phaser.Scene {
     }
   }
 
+    }
+
+  
   createBattleScreen() {
     this.battleUI = this.add.container(0, 0);
     this.battleUI.setDepth(1000);
 
-    const bg = this.add.rectangle(
-      192, 192, 384, 384, 0x101522
-    );
+    const bg = this.add.rectangle(192, 192, 384, 384, 0x101522);
+    const upper = this.add.rectangle(192, 90, 384, 180, 0x263b55);
+    const lower = this.add.rectangle(192, 285, 384, 198, 0x182337);
+    const ground = this.add.rectangle(192, 320, 384, 5, 0x8c9a9e);
 
-    const upper = this.add.rectangle(
-      192, 90, 384, 180, 0x263b55
-    );
+    this.battleUI.add([bg, upper, lower, ground]);
 
-    const lower = this.add.rectangle(
-      192, 285, 384, 198, 0x182337
-    );
+    // Đặt chân 2 nhân vật chạm đúng vạch mặt đất (y = 318)
+    this.attackerSprite = this.add.image(110, 318, "char1")
+      .setOrigin(0.5, 1)
+      .setScale(1.6);
 
-    const ground = this.add.rectangle(
-      192, 320, 384, 5, 0x8c9a9e
-    );
+    this.defenderSprite = this.add.image(280, 318, "char2")
+      .setOrigin(0.5, 1)
+      .setScale(1.6);
 
-    this.battleUI.add([
-      bg,
-      upper,
-      lower,
-      ground
-    ]);
-
-    this.attackerSprite = this.add.image(
-      110, 285, "char1"
-    ).setOrigin(0.5, 1);
-
-    this.defenderSprite = this.add.image(
-      280, 285, "char2"
-    ).setOrigin(0.5, 1);
-
+    // Lật mặt nhân vật bên trái nhìn sang phải đối diện địch
     this.attackerSprite.setFlipX(true);
     this.defenderSprite.setFlipX(false);
 
-    this.battleUI.add([
-      this.attackerSprite,
-      this.defenderSprite
-    ]);
+    this.battleUI.add([this.attackerSprite, this.defenderSprite]);
 
-    this.attackerName = this.add.text(
-      18, 43, "",
-      { fontSize: "13px", color: "#38bdf8" }
-    );
+    this.attackerName = this.add.text(18, 43, "", { fontSize: "13px", color: "#38bdf8" });
+    this.defenderName = this.add.text(366, 43, "", { fontSize: "13px", color: "#f87171" }).setOrigin(1, 0);
+    this.attackerHPText = this.add.text(18, 62, "", { fontSize: "12px", color: "#ffffff" });
+    this.defenderHPText = this.add.text(366, 62, "", { fontSize: "12px", color: "#ffffff" }).setOrigin(1, 0);
 
-    this.defenderName = this.add.text(
-      366, 43, "",
-      {
-        fontSize: "13px",
-        color: "#f87171"
-      }
-    ).setOrigin(1, 0);
+    this.attackerBarBG = this.add.rectangle(18, 84, 145, 9, 0x111111).setOrigin(0, 0.5);
+    this.defenderBarBG = this.add.rectangle(221, 84, 145, 9, 0x111111).setOrigin(0, 0.5);
+    this.attackerBar = this.add.rectangle(18, 84, 145, 7, 0x22c55e).setOrigin(0, 0.5);
+    this.defenderBar = this.add.rectangle(221, 84, 145, 7, 0x22c55e).setOrigin(0, 0.5);
 
-    this.attackerHPText = this.add.text(
-      18, 62, "",
-      { fontSize: "12px", color: "#ffffff" }
-    );
-
-    this.defenderHPText = this.add.text(
-      366, 62, "",
-      {
-        fontSize: "12px",
-        color: "#ffffff"
-      }
-    ).setOrigin(1, 0);
-
-    this.attackerBarBG = this.add.rectangle(
-      18, 84, 145, 9, 0x111111
-    ).setOrigin(0, 0.5);
-
-    this.defenderBarBG = this.add.rectangle(
-      221, 84, 145, 9, 0x111111
-    ).setOrigin(0, 0.5);
-
-    this.attackerBar = this.add.rectangle(
-      18, 84, 145, 7, 0x22c55e
-    ).setOrigin(0, 0.5);
-
-    this.defenderBar = this.add.rectangle(
-      221, 84, 145, 7, 0x22c55e
-    ).setOrigin(0, 0.5);
-
-    this.battleMessage = this.add.text(
-      192, 350,
-      "BATTLE START!",
-      {
-        fontSize: "13px",
-        color: "#facc15",
-        align: "center",
-        wordWrap: { width: 350 }
-      }
-    ).setOrigin(0.5);
+    this.battleMessage = this.add.text(192, 350, "BATTLE START!", {
+      fontSize: "13px",
+      color: "#facc15",
+      align: "center",
+      wordWrap: { width: 350 }
+    }).setOrigin(0.5);
 
     this.battleUI.add([
-      this.attackerName,
-      this.defenderName,
-      this.attackerHPText,
-      this.defenderHPText,
-      this.attackerBarBG,
-      this.defenderBarBG,
-      this.attackerBar,
-      this.defenderBar,
+      this.attackerName, this.defenderName,
+      this.attackerHPText, this.defenderHPText,
+      this.attackerBarBG, this.defenderBarBG,
+      this.attackerBar, this.defenderBar,
       this.battleMessage
     ]);
 
     this.battleUI.setVisible(false);
   }
 
-  
-setFrame(sprite, frame) {
-  if (!frame) return;
+  setFrame(sprite, frame) {
+    if (!frame) return;
 
-  const sourceKey =
-    sprite === this.attackerSprite
-      ? "char1"
-      : "char2";
+    const sourceKey = sprite === this.attackerSprite ? "char1" : "char2";
+    const textureKey = ["clean", sourceKey, frame.x, frame.y, frame.w, frame.h].join("_");
 
-  const source = this.textures
-    .get(sourceKey)
-    .getSourceImage();
+    // Nếu khung hình đã được tách nền trước đó thì dùng lại ngay (tối ưu hiệu năng)
+    if (this.textures.exists(textureKey)) {
+      sprite.setTexture(textureKey);
+      return;
+    }
 
-  const textureKey = [
-    "frame",
-    sourceKey,
-    frame.x,
-    frame.y,
-    frame.w,
-    frame.h
-  ].join("_");
-
-  if (!this.textures.exists(textureKey)) {
+    const source = this.textures.get(sourceKey).getSourceImage();
     const canvas = document.createElement("canvas");
-
     canvas.width = frame.w;
     canvas.height = frame.h;
+    const ctx = canvas.getContext("2d");
 
-    const ctx = canvas.getContext("2d", {
-      willReadFrequently: true
-    });
+    ctx.drawImage(source, frame.x, frame.y, frame.w, frame.h, 0, 0, frame.w, frame.h);
 
-    ctx.drawImage(
-      source,
-      frame.x,
-      frame.y,
-      frame.w,
-      frame.h,
-      0,
-      0,
-      frame.w,
-      frame.h
-    );
+    const imgData = ctx.getImageData(0, 0, frame.w, frame.h);
+    const data = imgData.data;
+
+    // 1. Xóa sạch nền trắng (bao gồm cả nhiễu nén JPEG ở Char1.jpg)
+    for (let i = 0; i < data.length; i += 4) {
+      if (data[i] > 230 && data[i + 1] > 230 && data[i + 2] > 230) {
+        data[i + 3] = 0;
+      }
+    }
+
+    // 2. Cắt bỏ vệt bóng đen tách rời dưới bàn chân
+    let bodyBottom = frame.h;
+    let foundFoot = false;
+    let emptyRows = 0;
+
+    for (let y = 0; y < frame.h; y++) {
+      let rowHasPixel = false;
+      for (let x = 0; x < frame.w; x++) {
+        if (data[(y * frame.w + x) * 4 + 3] > 0) {
+          rowHasPixel = true;
+          break;
+        }
+      }
+      if (rowHasPixel) {
+        foundFoot = true;
+        emptyRows = 0;
+        bodyBottom = y + 1;
+      } else if (foundFoot) {
+        emptyRows++;
+        // Nếu gặp khoảng trống >= 4px dưới chân thì xóa toàn bộ phần bóng bên dưới
+        if (emptyRows >= 4) {
+          for (let clearY = y; clearY < frame.h; clearY++) {
+            for (let clearX = 0; clearX < frame.w; clearX++) {
+              data[(clearY * frame.w + clearX) * 4 + 3] = 0;
+            }
+          }
+          break;
+        }
+      }
+    }
+
+    ctx.putImageData(imgData, 0, 0);
+
+    // Cắt gọn lại chiều cao canvas đúng tới bàn chân nhân vật
+    const finalCanvas = document.createElement("canvas");
+    finalCanvas.width = frame.w;
+    finalCanvas.height = Math.max(1, bodyBottom);
+    finalCanvas.getContext("2d").drawImage(canvas, 0, 0);
+
+    this.textures.addCanvas(textureKey, finalCanvas);
+    sprite.setTexture(textureKey);
+  }
 
     // Lấy dữ liệu pixel
     const imageData = ctx.getImageData(
