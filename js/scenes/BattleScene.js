@@ -319,16 +319,16 @@ export class BattleScene extends Phaser.Scene {
 
   async prepareSprites() {
     try {
-      await Promise.all([
-  this.spriteLoader.loadTextureReady("char1"),
-  this.spriteLoader.loadTextureReady("char2"),
-  this.spriteLoader.loadTextureReady("char5Manifest"),
-  ...CHAR5_FRAME_FILES.map(file =>
-    this.spriteLoader.loadTextureReady(
-      this.getChar5TextureKey(file)
-    )
-  )
-]);
+            await Promise.all([
+        this.spriteLoader.loadTextureReady("char1"),
+        this.spriteLoader.loadTextureReady("char2"),
+        this.spriteLoader.loadTextureReady("char5Manifest"),
+        ...CHAR5_FRAME_FILES.map(file =>
+          this.spriteLoader.loadTextureReady(
+            this.getChar5TextureKey(file)
+          )
+        )
+      ]);
 
       const manifest = this.cache.json.get("char5Manifest");
 
