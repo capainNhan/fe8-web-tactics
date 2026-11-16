@@ -890,140 +890,22 @@ export class BattleScene extends Phaser.Scene {
   // ==========================================
 
   setChar5Frame(sprite, file) {
-    if (!sprite || !file) return false;
+  return this.spriteAnimator.setCharacterFrame(
+    sprite,
+    file,
+    this.char5FrameTextures
+  );
+}
 
-    const textureKey = this.char5FrameTextures.get(file);
-
-    if (!textureKey || !this.textures.exists(textureKey)) {
-      console.warn("Char5 frame không tồn tại:", file);
-      return false;
-    }
-
-    sprite.setTexture(textureKey);
-    return true;
-  }
-
-  setFrame(sprite, frame) {
-    if (!frame || !sprite) return;
-
-    // Frame PNG riêng của Char5.
-    if (frame.file && this.char5FrameTextures.has(frame.file)) {
-      this.setChar5Frame(sprite, frame.file);
-      return;
-    }
-
-    const key =
-      sprite === this.attackerSprite
-        ? "char1"
-        : "char2";
-
-    const tKey = [
-      "clean",
-      key,
-      frame.x,
-      frame.y,
-      frame.w,
-      frame.h
-    ].join("_");
-
-    if (this.textures.exists(tKey)) {
-      sprite.setTexture(tKey);
-      return;
-    }
-
-    const src = this.textures
-      .get(key)
-      .getSourceImage();
-
-    const cv = document.createElement("canvas");
-
-    cv.width = frame.w;
-    cv.height = frame.h;
-
-    const ctx = cv.getContext("2d");
-
-    ctx.drawImage(
-      src,
-      frame.x,
-      frame.y,
-      frame.w,
-      frame.h,
-      0,
-      0,
-      frame.w,
-      frame.h
-    );
-
-    const imgData = ctx.getImageData(
-      0,
-      0,
-      frame.w,
-      frame.h
-    );
-
-    const d = imgData.data;
-
-    for (let i = 0; i < d.length; i += 4) {
-      if (
-        d[i] > 230 &&
-        d[i + 1] > 230 &&
-        d[i + 2] > 230
-      ) {
-        d[i + 3] = 0;
-      }
-    }
-
-    let bot = frame.h;
-    let foot = false;
-    let gap = 0;
-
-    for (let y = 0; y < frame.h; y++) {
-      let has = false;
-
-      for (let x = 0; x < frame.w; x++) {
-        if (
-          d[(y * frame.w + x) * 4 + 3] > 0
-        ) {
-          has = true;
-          break;
-        }
-      }
-
-      if (has) {
-        foot = true;
-        gap = 0;
-        bot = y + 1;
-
-      } else if (foot && ++gap >= 4) {
-        for (let cy = y; cy < frame.h; cy++) {
-          for (let cx = 0; cx < frame.w; cx++) {
-            d[
-              (cy * frame.w + cx) * 4 + 3
-            ] = 0;
-          }
-        }
-
-        break;
-      }
-    }
-
-    ctx.putImageData(imgData, 0, 0);
-
-    const fcv = document.createElement("canvas");
-
-    fcv.width = frame.w;
-    fcv.height = Math.max(1, bot);
-
-    fcv.getContext("2d").drawImage(
-      cv,
-      0,
-      0
-    );
-
-    this.textures.addCanvas(tKey, fcv);
-
-    sprite.setTexture(tKey);
-  }
+setFrame(sprite, frame) {
+  return this.spriteAnimator.setFrame(
+    sprite,
+    frame,
+    this.char5FrameTextures,
+    this.attackerSprite
+  );
+}
+        
 
   // ==========================================
   // ANIMATION
