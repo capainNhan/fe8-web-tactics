@@ -1,5 +1,4 @@
-import { SpriteAnimator } from "../systems/sprites/SpriteAnimator.js";
-import { SpriteLoader } from "../systems/sprites/SpriteLoader.js";
+import { SpriteManager } from "../systems/sprites/SpriteManager.js";
 import { TILE, GRID } from "../config.js";
 import { unitsData } from "../data/units.js";
 import {
@@ -36,20 +35,16 @@ export class BattleScene extends Phaser.Scene {
     this.turnPhase = "player";
     this.turnTransitioning = false;
 
-    this.animations = {
-      player: null,
-      enemy: null
+    
     };
 
-    this.char5Manifest = null;
-    this.char5FrameTextures = new Map();
-    this.char5Ready = false;
-    this.spriteAnimator = new SpriteAnimator(this);
-    this.spriteLoader = new SpriteLoader(
-  this,
-  CHAR5_FRAME_FILES,
-  file => this.getChar5TextureKey(file)
-);
+        this.spriteManager = new SpriteManager(this, {
+      frameFiles: CHAR5_FRAME_FILES,
+      getTextureKey: file =>
+        this.getChar5TextureKey(file)
+    });
+
+    this.animations = this.spriteManager.animations;
   }
 
   // ==========================================
@@ -317,86 +312,19 @@ export class BattleScene extends Phaser.Scene {
   // SPRITE PREPARATION
   // ==========================================
 
-  async prepareSprites() {
+    async prepareSprites() {
     try {
-                  await Promise.all([
-        this.spriteLoader.loadTextureReady("char1"),
-        this.spriteLoader.loadTextureReady("char2"),
-        this.spriteLoader.loadTextureReady("char5Manifest"),
-        ...CHAR5_FRAME_FILES.map(file =>
-          this.spriteLoader.loadTextureReady(
-            this.getChar5TextureKey(file)
-          )
-        )
-      ]);
-
-      const manifest = this.cache.json.get("char5Manifest");
-
-      this.spriteLoader.validateManifest(manifest);
-
-      this.char5Manifest = manifest;
-      this.char5FrameTextures.clear();
-
-      // Chỉ đăng ký những frame được animation sử dụng.
-      // frame_009.png là vùng ảnh nhỏ, không được dùng.
-      const usedFrames = new Set([
-        ...manifest.animations.attack.frames,
-        ...manifest.animations.return.frames
-      ]);
-
-      for (const file of usedFrames) {
-        const key = this.getChar5TextureKey(file);
-
-        if (!this.textures.exists(key)) {
-          throw new Error(
-            "Không tìm thấy texture Char5: " + file
-          );
-        }
-
-        this.char5FrameTextures.set(file, key);
-      }
-
-      this.animations.player = {
-        type: "manifest",
-        attack: manifest.animations.attack.frames,
-        return: manifest.animations.return.frames,
-        frameDurationMs: manifest.frameDurationMs || 50
-      };
-
-      this.animations.enemy = autoSlice(
-        this.textures.get("char2").getSourceImage()
-      );
-
-      this.char5Ready = true;
-
-      const idleFile =
-        manifest.animations.attack.frames[0];
-
-      // Gán Char5 trực tiếp vào sprite Battle.
-      if (!this.setChar5Frame(
+      const result = await this.spriteManager.prepare(
         this.attackerSprite,
-        idleFile
-      )) {
-        throw new Error(
-          "Không thể gán frame Char5 vào attackerSprite."
-        );
-      }
-
-      this.setFrame(
-        this.defenderSprite,
-        getIdleFrame(this.animations.enemy)
+        this.defenderSprite
       );
 
-      console.log("[Char5] Đã tải thành công:", {
-        idle: idleFile,
-        attack: manifest.animations.attack.frames,
-        return: manifest.animations.return.frames
-      });
+      console.log("[SpriteManager] Đã chuẩn bị sprite:", result);
 
-      this.log("Đã tải Char5 và manifest animation.");
+      this.log("Đã tải Char4 và sprite Char2.");
 
     } catch (error) {
-      this.char5Ready = false;
+      this.spriteManager.ready = false;
 
       console.error(
         "Không thể chuẩn bị battle sprites:",
@@ -404,14 +332,10 @@ export class BattleScene extends Phaser.Scene {
       );
 
       this.log(
-        "Lỗi tải Char5: " + error.message
+        "Lỗi tải sprite: " + error.message
       );
     }
-  }
-
-  
-
-  
+    }
 
   // ==========================================
   // MAP
@@ -803,23 +727,20 @@ export class BattleScene extends Phaser.Scene {
   // SPRITE FRAME
   // ==========================================
 
-  setChar5Frame(sprite, file) {
-  return this.spriteAnimator.setCharacterFrame(
-    sprite,
-    file,
-    this.char5FrameTextures
-  );
-}
+    setChar5Frame(sprite, file) {
+    return this.spriteManager.setCharacterFrame(
+      sprite,
+      file
+    );
+  }
 
-setFrame(sprite, frame) {
-  return this.spriteAnimator.setFrame(
-    sprite,
-    frame,
-    this.char5FrameTextures,
-    this.attackerSprite
-  );
-}
-        
+  setFrame(sprite, frame) {
+    return this.spriteManager.setFrame(
+      sprite,
+      frame,
+      this.attackerSprite
+    );
+  }
 
   // ==========================================
   // ANIMATION
@@ -1025,7 +946,7 @@ setFrame(sprite, frame) {
     this.updateTurnUI();
 
     try {
-      if (!this.char5Ready) {
+    if (!this.spriteManager.ready) {
         throw new Error(
           "Char5 chưa sẵn sàng. Kiểm tra manifest và thư mục frames."
         );
