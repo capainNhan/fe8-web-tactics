@@ -1,4 +1,5 @@
 import { SpriteAnimator } from "../systems/sprites/SpriteAnimator.js";
+import { SpriteLoader } from "../systems/sprites/SpriteLoader.js";
 import { TILE, GRID } from "../config.js";
 import { unitsData } from "../data/units.js";
 import {
@@ -44,6 +45,11 @@ export class BattleScene extends Phaser.Scene {
     this.char5FrameTextures = new Map();
     this.char5Ready = false;
     this.spriteAnimator = new SpriteAnimator(this);
+    this.spriteLoader = new SpriteLoader(
+  this,
+  CHAR5_FRAME_FILES,
+  file => this.getChar5TextureKey(file)
+);
   }
 
   // ==========================================
@@ -314,17 +320,19 @@ export class BattleScene extends Phaser.Scene {
   async prepareSprites() {
     try {
       await Promise.all([
-        this.loadTextureReady("char1"),
-        this.loadTextureReady("char2"),
-        this.loadTextureReady("char5Manifest"),
-        ...CHAR5_FRAME_FILES.map(file =>
-          this.loadTextureReady(this.getChar5TextureKey(file))
-        )
-      ]);
+  this.spriteLoader.loadTextureReady("char1"),
+  this.spriteLoader.loadTextureReady("char2"),
+  this.spriteLoader.loadTextureReady("char5Manifest"),
+  ...CHAR5_FRAME_FILES.map(file =>
+    this.spriteLoader.loadTextureReady(
+      this.getChar5TextureKey(file)
+    )
+  )
+]);
 
       const manifest = this.cache.json.get("char5Manifest");
 
-      this.validateChar5Manifest(manifest);
+      this.spriteLoader.validateManifest(manifest);
 
       this.char5Manifest = manifest;
       this.char5FrameTextures.clear();
