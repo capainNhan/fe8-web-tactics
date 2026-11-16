@@ -330,19 +330,23 @@ export class BattleScene extends Phaser.Scene {
       this.char5Manifest = manifest;
       this.char5FrameTextures.clear();
 
-      for (const frame of manifest.frames) {
-        const key = this.getChar5TextureKey(frame.file);
+      // Chỉ đăng ký những frame được animation sử dụng.
+      // frame_009.png là vùng ảnh nhỏ, không được dùng.
+      const usedFrames = new Set([
+        ...manifest.animations.attack.frames,
+        ...manifest.animations.return.frames
+      ]);
+
+      for (const file of usedFrames) {
+        const key = this.getChar5TextureKey(file);
 
         if (!this.textures.exists(key)) {
           throw new Error(
-            "Không tìm thấy texture Char5: " + frame.file
+            "Không tìm thấy texture Char5: " + file
           );
         }
 
-        this.char5FrameTextures.set(
-          frame.file,
-          key
-        );
+        this.char5FrameTextures.set(file, key);
       }
 
       this.animations.player = {
@@ -361,15 +365,26 @@ export class BattleScene extends Phaser.Scene {
       const idleFile =
         manifest.animations.attack.frames[0];
 
-      this.setChar5Frame(
+      // Gán Char5 trực tiếp vào sprite Battle.
+      if (!this.setChar5Frame(
         this.attackerSprite,
         idleFile
-      );
+      )) {
+        throw new Error(
+          "Không thể gán frame Char5 vào attackerSprite."
+        );
+      }
 
       this.setFrame(
         this.defenderSprite,
         getIdleFrame(this.animations.enemy)
       );
+
+      console.log("[Char5] Đã tải thành công:", {
+        idle: idleFile,
+        attack: manifest.animations.attack.frames,
+        return: manifest.animations.return.frames
+      });
 
       this.log("Đã tải Char5 và manifest animation.");
 
@@ -419,14 +434,18 @@ export class BattleScene extends Phaser.Scene {
           "Frame không có trong manifest: " + file
         );
       }
-    }
 
-    for (const frame of manifest.frames) {
+      if (!CHAR5_FRAME_FILES.includes(file)) {
+        throw new Error(
+          "Frame chưa được khai báo tải: " + file
+        );
+      }
+
       if (!this.textures.exists(
-        this.getChar5TextureKey(frame.file)
+        this.getChar5TextureKey(file)
       )) {
         throw new Error(
-          "Thiếu file ảnh: " + frame.file
+          "Thiếu file ảnh đang được sử dụng: " + file
         );
       }
     }
@@ -770,6 +789,7 @@ export class BattleScene extends Phaser.Scene {
       )
     ]);
 
+    // Sprite trái: sẽ được thay bằng Char5 sau khi tải manifest.
     this.attackerSprite = this.add.image(
       110, 316, "char1"
     )
@@ -777,6 +797,7 @@ export class BattleScene extends Phaser.Scene {
       .setScale(1.7)
       .setFlipX(true);
 
+    // Sprite phải: giữ nguyên Char2.
     this.defenderSprite = this.add.image(
       275, 316, "char2"
     )
