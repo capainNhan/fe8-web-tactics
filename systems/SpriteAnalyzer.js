@@ -1,7 +1,13 @@
 
 /**
- * SpriteAnalyzer.js
- * Phân tích cấu trúc sprite sheet, không chỉnh sửa ảnh gốc.
+ * SpriteAnalyzer V2
+ *
+ * - Phát hiện pixel thuộc sprite.
+ * - Tìm các vùng pixel liên thông bằng Flood Fill.
+ * - Tạo bounding box cho từng vùng.
+ * - Thống kê hàng/cột.
+ *
+ * Không chỉnh sửa ảnh gốc.
  */
 
 export class SpriteAnalyzer {
@@ -9,15 +15,22 @@ export class SpriteAnalyzer {
     this.options = {
       alphaThreshold: 20,
       backgroundTolerance: 18,
-      gapTolerance: 2,
-      minPixelsPerLine: 1,
+
+      // Loại bỏ các vùng nhiễu quá nhỏ.
+      minComponentPixels: 2,
+      minComponentWidth: 1,
+      minComponentHeight: 1,
+
+      // 8 hướng liên thông.
+      connectivity: 8,
+
       ...options
     };
   }
 
   analyze(image, customOptions = {}) {
     if (!image) {
-      throw new Error("SpriteAnalyzer: Không tìm thấy ảnh đầu vào.");
+      throw new Error("SpriteAnalyzer: Missing input image.");
     }
 
     const options = {
@@ -29,7 +42,7 @@ export class SpriteAnalyzer {
     const height = image.naturalHeight || image.height;
 
     if (!width || !height) {
-      throw new Error("SpriteAnalyzer: Ảnh chưa được tải hoặc không hợp lệ.");
+      throw new Error("SpriteAnalyzer: Invalid image dimensions.");
     }
 
     const canvas = document.createElement("canvas");
@@ -41,15 +54,19 @@ export class SpriteAnalyzer {
     });
 
     if (!ctx) {
-      throw new Error("SpriteAnalyzer: Không thể tạo Canvas Context.");
+      throw new Error("SpriteAnalyzer: Canvas unavailable.");
     }
 
     ctx.drawImage(image, 0, 0);
 
-    const imageData = ctx.getImageData(0, 0, width, height);
-    const pixels = imageData.data;
+    const imageData = ctx.getImageData(
+      0, 0, width, height
+    );
 
-    // 1. Kiểm tra nền ảnh từ bốn góc.
+    const pixels = imageData.data;
+    const totalPixels = width * height;
+
+    // 1. Nhận diện nền.
     const background = this.detectBackground(
       pixels,
       width,
@@ -57,60 +74,67 @@ export class SpriteAnalyzer {
       options
     );
 
-    // 2. Quét pixel và tạo projection theo hàng/cột.
-    const rows = new Array(height).fill(0);
-    const columns = new Array(width).fill(0);
+    // 2. Tạo mask pixel.
+    const mask = new Uint8Array(totalPixels);
+
+    const rowProjection = new Uint32Array(height);
+    const columnProjection = new Uint32Array(width);
 
     let transparentPixels = 0;
     let foregroundPixels = 0;
 
-    for (let y = 0; y < height; y++) {
-      for (let x = 0; x < width; x++) {
-        const index = (y * width + x) * 4;
+    for (let i = 0; i < totalPixels; i++) {
+      const p = i * 4;
 
-        const r = pixels[index];
-        const g = pixels[index + 1];
-        const b = pixels[index + 2];
-        const a = pixels[index + 3];
+      const r = pixels[p];
+      const g = pixels[p + 1];
+      const b = pixels[p + 2];
+      const a = pixels[p + 3];
 
-        if (a < options.alphaThreshold) {
-          transparentPixels++;
-          continue;
-        }
-
-        if (
-          background &&
-          this.colorDistance(r, g, b, background) <=
-            options.backgroundTolerance
-        ) {
-          continue;
-        }
-
-        rows[y]++;
-        columns[x]++;
-        foregroundPixels++;
+      if (a < options.alphaThreshold) {
+        transparentPixels++;
+        continue;
       }
+
+      if (
+        background &&
+        this.colorDistance(r, g, b, background) <=
+          options.backgroundTolerance
+      ) {
+        continue;
+      }
+
+      mask[i] = 1;
+      foregroundPixels++;
+
+      const x = i % width;
+      const y = Math.floor(i / width);
+
+      rowProjection[y]++;
+      columnProjection[x]++;
     }
 
-    // 3. Tìm các dải pixel có nội dung.
-    const rowBands = this.findBands(
-      rows,
-      options.minPixelsPerLine,
-      options.gapTolerance
-    );
-
-    const columnBands = this.findBands(
-      columns,
-      options.minPixelsPerLine,
-      options.gapTolerance
-    );
-
-    // 4. Thống kê.
-    const totalPixels = width * height;
-
-    const result = {
+    // 3. Tìm connected components.
+    const components = this.findComponents(
+      mask,
       width,
       height,
+      options
+    );
+
+    // 4. Tìm các dải nội dung.
+    const rowBands = this.findBands(rowProjection);
+    const columnBands = this.findBands(columnProjection);
+
+    // 5. Tạo báo cáo.
+    const report = {
+      version: 2,
+
+      image: {
+        width,
+        height,
+        totalPixels
+      },
 
       transparency: {
         hasTransparency: transparentPixels > 0,
@@ -141,70 +165,73 @@ export class SpriteAnalyzer {
         estimatedColumns: columnBands.length
       },
 
+      components: {
+        count: components.length,
+        items: components
+      },
+
       warnings: []
     };
 
-    // 5. Đưa ra cảnh báo khi cấu trúc chưa rõ.
+    if (components.length === 0) {
+      report.warnings.push(
+        "Không tìm thấy vùng pixel phù hợp."
+      );
+    }
+
     if (!background && transparentPixels === 0) {
-      result.warnings.push(
-        "Không xác định được nền đơn sắc. Có thể cần cấu hình nền thủ công."
+      report.warnings.push(
+        "Không xác định được nền. Cần kiểm tra hoặc cấu hình thủ công."
       );
     }
 
-    if (rowBands.length === 0 || columnBands.length === 0) {
-      result.warnings.push(
-        "Không tìm thấy vùng sprite rõ ràng."
+    if (components.length > 500) {
+      report.warnings.push(
+        "Có rất nhiều vùng pixel nhỏ. Có thể cần tăng minComponentPixels."
       );
     }
 
-    if (rowBands.length === 1 && columnBands.length === 1) {
-      result.warnings.push(
-        "Ảnh có thể là một sprite đơn thay vì sprite sheet."
-      );
-    }
-
-    return result;
+    return report;
   }
 
   detectBackground(pixels, width, height, options) {
-    const points = [
+    const corners = [
       [0, 0],
       [width - 1, 0],
       [0, height - 1],
       [width - 1, height - 1]
     ];
 
-    const colors = points.map(([x, y]) => {
-      const index = (y * width + x) * 4;
+    const colors = corners.map(([x, y]) => {
+      const i = (y * width + x) * 4;
 
       return {
-        r: pixels[index],
-        g: pixels[index + 1],
-        b: pixels[index + 2],
-        a: pixels[index + 3]
+        r: pixels[i],
+        g: pixels[i + 1],
+        b: pixels[i + 2],
+        a: pixels[i + 3]
       };
     });
 
-    // Nếu các góc trong suốt, ưu tiên xử lý bằng alpha.
+    // Nếu có góc trong suốt, không đoán nền màu.
     if (
-      colors.some(color => color.a < options.alphaThreshold)
+      colors.some(c => c.a < options.alphaThreshold)
     ) {
       return null;
     }
 
-    const first = colors[0];
+    const reference = colors[0];
 
-    // Chỉ nhận nền khi bốn góc có màu tương đối giống nhau.
-    const cornersMatch = colors.every(color =>
+    const sameBackground = colors.every(color =>
       this.colorDistance(
         color.r,
         color.g,
         color.b,
-        first
+        reference
       ) <= options.backgroundTolerance
     );
 
-    return cornersMatch ? first : null;
+    return sameBackground ? reference : null;
   }
 
   colorDistance(r, g, b, color) {
@@ -215,45 +242,139 @@ export class SpriteAnalyzer {
     );
   }
 
-  findBands(projection, minPixels = 1, gapTolerance = 2) {
-    const bands = [];
+  findComponents(mask, width, height, options) {
+    const total = width * height;
 
-    let start = -1;
-    let lastActive = -1;
+    // Mỗi pixel chỉ được đưa vào stack tối đa một lần.
+    const stack = new Int32Array(total);
+    const components = [];
 
-    for (let i = 0; i < projection.length; i++) {
-      if (projection[i] >= minPixels) {
-        if (start === -1) {
-          start = i;
+    const directions = options.connectivity === 4
+      ? [
+          [-1, 0],
+          [1, 0],
+          [0, -1],
+          [0, 1]
+        ]
+      : [
+          [-1, -1],
+          [0, -1],
+          [1, -1],
+          [-1, 0],
+          [1, 0],
+          [-1, 1],
+          [0, 1],
+          [1, 1]
+        ];
+
+    for (let start = 0; start < total; start++) {
+      if (mask[start] === 0) continue;
+
+      let top = 0;
+      let pixelCount = 0;
+
+      let minX = width;
+      let minY = height;
+      let maxX = -1;
+      let maxY = -1;
+
+      // Đánh dấu ngay khi đưa vào stack.
+      mask[start] = 0;
+      stack[top++] = start;
+
+      while (top > 0) {
+        const index = stack[--top];
+
+        const x = index % width;
+        const y = Math.floor(index / width);
+
+        pixelCount++;
+
+        if (x < minX) minX = x;
+        if (x > maxX) maxX = x;
+        if (y < minY) minY = y;
+        if (y > maxY) maxY = y;
+
+        for (const [dx, dy] of directions) {
+          const nx = x + dx;
+          const ny = y + dy;
+
+          if (
+            nx < 0 ||
+            nx >= width ||
+            ny < 0 ||
+            ny >= height
+          ) {
+            continue;
+          }
+
+          const nextIndex = ny * width + nx;
+
+          if (mask[nextIndex] === 0) continue;
+
+          mask[nextIndex] = 0;
+          stack[top++] = nextIndex;
         }
+      }
 
-        lastActive = i;
+      const componentWidth = maxX - minX + 1;
+      const componentHeight = maxY - minY + 1;
+
+      if (
+        pixelCount < options.minComponentPixels ||
+        componentWidth < options.minComponentWidth ||
+        componentHeight < options.minComponentHeight
+      ) {
         continue;
       }
 
-      if (
-        start !== -1 &&
-        i - lastActive > gapTolerance
-      ) {
+      components.push({
+        x: minX,
+        y: minY,
+        width: componentWidth,
+        height: componentHeight,
+        pixelCount,
+
+        centerX: (minX + maxX) / 2,
+        centerY: (minY + maxY) / 2
+      });
+    }
+
+    // Sắp xếp từ trên xuống dưới, trái sang phải.
+    components.sort((a, b) => {
+      if (a.y !== b.y) return a.y - b.y;
+      return a.x - b.x;
+    });
+
+    return components;
+  }
+
+  findBands(projection) {
+    const bands = [];
+    let start = -1;
+
+    for (let i = 0; i < projection.length; i++) {
+      if (projection[i] > 0) {
+        if (start === -1) start = i;
+      } else if (start !== -1) {
         bands.push({
           start,
-          end: lastActive,
-          size: lastActive - start + 1
+          end: i - 1,
+          size: i - start
         });
 
         start = -1;
-        lastActive = -1;
       }
     }
 
     if (start !== -1) {
       bands.push({
         start,
-        end: lastActive,
-        size: lastActive - start + 1
+        end: projection.length - 1,
+        size: projection.length - start
       });
     }
 
     return bands;
   }
-}
+            }
