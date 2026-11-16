@@ -7,9 +7,6 @@ export class SpriteAnimator {
   }
 
   setCharacterFrame(sprite, file, frameTextures) {
-  }
-
-  setCharacterFrame(sprite, file, frameTextures) {
     if (!sprite || !file) return false;
 
     const scene = this.scene;
