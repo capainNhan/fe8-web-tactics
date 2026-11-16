@@ -1,0 +1,523 @@
+
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+  <title>FE8 Sprite Lab</title>
+
+  <style>
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      padding: 20px;
+      background: #151922;
+      color: #e8edf5;
+      font-family: Arial, sans-serif;
+    }
+
+    h1 {
+      color: #70d6a0;
+    }
+
+    .panel {
+      background: #222a36;
+      border: 1px solid #394456;
+      border-radius: 10px;
+      padding: 16px;
+      margin-bottom: 16px;
+    }
+
+    button, input {
+      padding: 9px;
+      margin: 5px;
+      border-radius: 5px;
+    }
+
+    button {
+      background: #287b59;
+      color: white;
+      border: 0;
+      cursor: pointer;
+    }
+
+    input {
+      max-width: 100px;
+    }
+
+    .workspace {
+      overflow: auto;
+      background-color: #303744;
+      background-image:
+        linear-gradient(45deg, #414b5b 25%, transparent 25%),
+        linear-gradient(-45deg, #414b5b 25%, transparent 25%),
+        linear-gradient(45deg, transparent 75%, #414b5b 75%),
+        linear-gradient(-45deg, transparent 75%, #414b5b 75%);
+      background-size: 20px 20px;
+      background-position:
+        0 0, 0 10px, 10px -10px, -10px 0;
+      min-height: 250px;
+      padding: 15px;
+      text-align: center;
+    }
+
+    canvas {
+      display: block;
+      max-width: 100%;
+      height: auto;
+      margin: auto;
+      image-rendering: pixelated;
+    }
+
+    .stats {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+      gap: 10px;
+    }
+
+    .stat {
+      background: #303b4a;
+      padding: 12px;
+      border-radius: 7px;
+    }
+
+    .stat strong {
+      display: block;
+      font-size: 20px;
+      color: #70d6a0;
+      margin-top: 6px;
+    }
+
+    pre {
+      white-space: pre-wrap;
+      overflow-wrap: anywhere;
+      color: #b9d7ff;
+      font-size: 12px;
+    }
+
+    #components {
+      max-height: 400px;
+      overflow: auto;
+    }
+
+    .warning {
+      color: #ffc66d;
+    }
+  </style>
+</head>
+
+<body>
+
+  <h1>FE8 Sprite Lab V1</h1>
+
+  <p>
+    Công cụ kiểm thử SpriteAnalyzer độc lập.
+    Không can thiệp Battle Runtime.
+  </p>
+
+  <div class="panel">
+
+    <h3>1. Chọn Sprite</h3>
+
+    <input
+      type="file"
+      id="fileInput"
+      accept="image/png,image/jpeg,image/webp"
+    >
+
+    <button id="analyzeBtn">
+      Phân tích lại
+    </button>
+
+    <button id="clearBtn">
+      Xóa ảnh
+    </button>
+
+    <p id="status">Chưa chọn ảnh.</p>
+
+  </div>
+
+  <div class="panel">
+
+    <h3>2. Cấu hình Analyzer</h3>
+
+    <label>
+      Alpha Threshold:
+      <input id="alpha" type="number" value="20" min="0" max="255">
+    </label>
+
+    <label>
+      Background Tolerance:
+      <input id="tolerance" type="number" value="18" min="0" max="442">
+    </label>
+
+    <label>
+      Min Pixels:
+      <input id="minPixels" type="number" value="2" min="1">
+    </label>
+
+    <label>
+      Connectivity:
+      <select id="connectivity">
+        <option value="8" selected>8 hướng</option>
+        <option value="4">4 hướng</option>
+      </select>
+    </label>
+
+  </div>
+
+  <div class="panel">
+
+    <h3>3. Hình ảnh và Bounding Box</h3>
+
+    <div class="workspace">
+      <canvas id="preview"></canvas>
+    </div>
+
+    <p>
+      Khung màu thể hiện vùng pixel liên thông
+      được SpriteAnalyzer phát hiện.
+    </p>
+
+  </div>
+
+  <div class="panel">
+
+    <h3>4. Thống kê</h3>
+
+    <div class="stats">
+
+      <div class="stat">
+        Kích thước ảnh
+        <strong id="dimensions">-</strong>
+      </div>
+
+      <div class="stat">
+        Components
+        <strong id="componentCount">-</strong>
+      </div>
+
+      <div class="stat">
+        Foreground
+        <strong id="foreground">-</strong>
+      </div>
+
+      <div class="stat">
+        Transparency
+        <strong id="transparency">-</strong>
+      </div>
+
+    </div>
+
+  </div>
+
+  <div class="panel">
+
+    <h3>5. Danh sách Components</h3>
+
+    <div id="components">
+      Chưa có dữ liệu.
+    </div>
+
+  </div>
+
+  <div class="panel">
+
+    <h3>6. Báo cáo chi tiết</h3>
+
+    <pre id="report">Chưa phân tích.</pre>
+
+  </div>
+
+<script type="module">
+
+import { SpriteAnalyzer }
+  from "./js/systems/SpriteAnalyzer.js";
+
+const analyzer = new SpriteAnalyzer();
+
+const fileInput = document.getElementById("fileInput");
+const canvas = document.getElementById("preview");
+const ctx = canvas.getContext("2d");
+
+const status = document.getElementById("status");
+
+let currentImage = null;
+let currentReport = null;
+let currentUrl = null;
+
+const $ = id => document.getElementById(id);
+
+// Chọn ảnh.
+fileInput.addEventListener("change", event => {
+
+  const file = event.target.files[0];
+
+  if (!file) return;
+
+  if (currentUrl) {
+    URL.revokeObjectURL(currentUrl);
+  }
+
+  currentUrl = URL.createObjectURL(file);
+
+  const image = new Image();
+
+  image.onload = () => {
+
+    currentImage = image;
+
+    status.textContent =
+      `Đã tải: ${file.name}`;
+
+    analyze();
+
+  };
+
+  image.onerror = () => {
+    status.textContent = "Không thể đọc ảnh.";
+  };
+
+  image.src = currentUrl;
+
+});
+
+// Phân tích ảnh.
+function analyze() {
+
+  if (!currentImage) {
+    status.textContent = "Chưa chọn ảnh.";
+    return;
+  }
+
+  try {
+
+    const options = {
+
+      alphaThreshold: Number($("alpha").value),
+
+      backgroundTolerance:
+        Number($("tolerance").value),
+
+      minComponentPixels:
+        Number($("minPixels").value),
+
+      connectivity:
+        Number($("connectivity").value)
+
+    };
+
+    currentReport = analyzer.analyze(
+      currentImage,
+      options
+    );
+
+    renderPreview();
+    renderStatistics();
+    renderComponents();
+    renderReport();
+
+    status.textContent =
+      "Phân tích thành công.";
+
+  } catch (error) {
+
+    console.error(error);
+
+    status.textContent =
+      "Lỗi: " + error.message;
+
+  }
+
+}
+
+// Vẽ ảnh và bounding box.
+function renderPreview() {
+
+  const image = currentImage;
+  const report = currentReport;
+
+  canvas.width = image.naturalWidth;
+  canvas.height = image.naturalHeight;
+
+  ctx.clearRect(
+    0, 0,
+    canvas.width,
+    canvas.height
+  );
+
+  ctx.drawImage(image, 0, 0);
+
+  const components = report.components.items;
+
+  components.forEach((item, index) => {
+
+    const hue = (index * 137.5) % 360;
+
+    ctx.strokeStyle =
+      `hsl(${hue}, 100%, 60%)`;
+
+    ctx.lineWidth = Math.max(
+      1,
+      Math.min(canvas.width, canvas.height) / 300
+    );
+
+    ctx.strokeRect(
+      item.x,
+      item.y,
+      item.width,
+      item.height
+    );
+
+  });
+
+}
+
+// Thống kê.
+function renderStatistics() {
+
+  const report = currentReport;
+
+  $("dimensions").textContent =
+    `${report.image.width} × ${report.image.height}`;
+
+  $("componentCount").textContent =
+    report.components.count;
+
+  $("foreground").textContent =
+    report.content.foregroundPixels.toLocaleString();
+
+  $("transparency").textContent =
+    (report.transparency.ratio * 100).toFixed(2) + "%";
+
+}
+
+// Danh sách vùng.
+function renderComponents() {
+
+  const items = currentReport.components.items;
+
+  const container = $("components");
+
+  if (!items.length) {
+    container.textContent =
+      "Không tìm thấy component.";
+    return;
+  }
+
+  const table = document.createElement("table");
+
+  table.style.width = "100%";
+  table.style.borderCollapse = "collapse";
+
+  const header = document.createElement("tr");
+
+  [
+    "ID",
+    "X",
+    "Y",
+    "Width",
+    "Height",
+    "Pixels"
+  ].forEach(value => {
+
+    const th = document.createElement("th");
+
+    th.textContent = value;
+    th.style.padding = "8px";
+    th.style.borderBottom = "1px solid #596579";
+
+    header.appendChild(th);
+
+  });
+
+  table.appendChild(header);
+
+  items.forEach((item, index) => {
+
+    const tr = document.createElement("tr");
+
+    [
+      index,
+      item.x,
+      item.y,
+      item.width,
+      item.height,
+      item.pixelCount
+    ].forEach(value => {
+
+      const td = document.createElement("td");
+
+      td.textContent = value;
+      td.style.padding = "7px";
+      td.style.borderBottom =
+        "1px solid #394456";
+
+      tr.appendChild(td);
+
+    });
+
+    table.appendChild(tr);
+
+  });
+
+  container.replaceChildren(table);
+
+}
+
+// Báo cáo.
+function renderReport() {
+
+  $("report").textContent =
+    JSON.stringify(currentReport, null, 2);
+
+}
+
+// Nút phân tích lại.
+$("analyzeBtn").addEventListener(
+  "click",
+  analyze
+);
+
+// Xóa dữ liệu.
+$("clearBtn").addEventListener("click", () => {
+
+  currentImage = null;
+  currentReport = null;
+
+  if (currentUrl) {
+    URL.revokeObjectURL(currentUrl);
+    currentUrl = null;
+  }
+
+  fileInput.value = "";
+
+  ctx.clearRect(
+    0, 0,
+    canvas.width,
+    canvas.height
+  );
+
+  canvas.width = 0;
+  canvas.height = 0;
+
+  $("dimensions").textContent = "-";
+  $("componentCount").textContent = "-";
+  $("foreground").textContent = "-";
+  $("transparency").textContent = "-";
+
+  $("components").textContent = "Chưa có dữ liệu.";
+  $("report").textContent = "Chưa phân tích.";
+
+  status.textContent = "Đã xóa ảnh.";
+
+});
+
+</script>
+
+</body>
+</html>
