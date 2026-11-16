@@ -5,11 +5,8 @@ import {
   calculateBattlePreview,
   resolveStrike
 } from "../fe8Logic.js";
-import {
-  autoSlice,
-  getIdleFrame
+import { getIdleFrame } from "../systems/spriteSheet.js";
 } from "../systems/spriteSheet.js";
-
 const CHAR5_PATH = "./assets/characters/Char4/";
 const CHAR5_FRAME_PATH = CHAR5_PATH + "frames/";
 
@@ -45,7 +42,7 @@ export class BattleScene extends Phaser.Scene {
     });
 
     this.animations = this.spriteManager.animations;
-  }
+  
 
   // ==========================================
   // PRELOAD
