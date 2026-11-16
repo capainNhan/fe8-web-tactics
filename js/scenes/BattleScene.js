@@ -6,7 +6,6 @@ import {
   resolveStrike
 } from "../fe8Logic.js";
 import { getIdleFrame } from "../systems/spriteSheet.js";
-} from "../systems/spriteSheet.js";
 const CHAR5_PATH = "./assets/characters/Char4/";
 const CHAR5_FRAME_PATH = CHAR5_PATH + "frames/";
 
@@ -23,7 +22,7 @@ const CHAR5_FRAME_FILES = [
 export class BattleScene extends Phaser.Scene {
   constructor() {
     super("BattleScene");
-
+    
     this.selectedUnit = null;
     this.moveTiles = [];
     this.battleInProgress = false;
@@ -31,9 +30,7 @@ export class BattleScene extends Phaser.Scene {
     this.turnNumber = 1;
     this.turnPhase = "player";
     this.turnTransitioning = false;
-
     
-    };
 
         this.spriteManager = new SpriteManager(this, {
       frameFiles: CHAR5_FRAME_FILES,
