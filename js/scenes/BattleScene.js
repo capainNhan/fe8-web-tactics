@@ -319,7 +319,7 @@ export class BattleScene extends Phaser.Scene {
 
   async prepareSprites() {
     try {
-            await Promise.all([
+                  await Promise.all([
         this.spriteLoader.loadTextureReady("char1"),
         this.spriteLoader.loadTextureReady("char2"),
         this.spriteLoader.loadTextureReady("char5Manifest"),
