@@ -90,7 +90,7 @@ export function calculateBattlePreview(
   const asA = calcAttackSpeed(attacker);
   const asD = calcAttackSpeed(defender);
 
-  // Attacker
+  // Chỉ số tấn công của bên chủ động.
   const dmgA = Math.max(
     0,
     attacker.str +
@@ -126,7 +126,7 @@ export function calculateBattlePreview(
     )
   );
 
-  // Defender
+  // Chỉ số phản công của đối thủ.
   const dmgD = Math.max(
     0,
     defender.str +
@@ -180,19 +180,32 @@ export function calculateBattlePreview(
 }
 
 /**
- * Thực hiện một đòn đánh.
+ * Tính kết quả một đòn đánh.
+ *
+ * Lưu ý:
+ * Hàm này KHÔNG thay đổi HP.
+ * BattleScene sẽ trừ HP đúng một lần
+ * tại thời điểm va chạm trong animation.
  */
 export function resolveStrike(
   attacker,
   defender,
   stats
 ) {
-  if (attacker.hp <= 0 || defender.hp <= 0) {
+  if (
+    !attacker ||
+    !defender ||
+    !stats ||
+    attacker.hp <= 0 ||
+    defender.hp <= 0
+  ) {
     return {
       hit: false,
       crit: false,
       damage: 0,
-      defeated: false
+      defeated: defender
+        ? defender.hp <= 0
+        : false
     };
   }
 
@@ -214,15 +227,10 @@ export function resolveStrike(
     ? stats.dmg * 3
     : stats.dmg;
 
-  defender.hp = Math.max(
-    0,
-    defender.hp - damage
-  );
-
   return {
     hit: true,
     crit,
     damage,
-    defeated: defender.hp <= 0
+    defeated: defender.hp - damage <= 0
   };
 }
