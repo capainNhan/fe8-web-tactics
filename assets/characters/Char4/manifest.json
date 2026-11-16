@@ -1,0 +1,96 @@
+{
+  "format": "FE8_SPRITE_ANIMATION_V1",
+  "source": {
+    "file": "Char4",
+    "width": 527,
+    "height": 299
+  },
+  "frameDurationMs": 50,
+  "animations": {
+    "attack": {
+      "description": "Đứng yên → lấy đà → lao tới → đánh trúng",
+      "frames": [
+        "frame_001.png",
+        "frame_001.png",
+        "frame_002.png",
+        "frame_002.png",
+        "frame_003.png",
+        "frame_003.png",
+        "frame_004.png",
+        "frame_004.png",
+        "frame_005.png",
+        "frame_005.png"
+      ]
+    },
+    "return": {
+      "description": "Lui về vị trí ban đầu",
+      "frames": [
+        "frame_006.png",
+        "frame_006.png",
+        "frame_007.png",
+        "frame_007.png",
+        "frame_001.png",
+        "frame_001.png",
+        "frame_001.png"
+      ]
+    }
+  },
+  "frames": [
+    {
+      "id": 0,
+      "file": "frame_001.png",
+      "x": 132,
+      "y": 154,
+      "width": 43,
+      "height": 64
+    },
+    {
+      "id": 1,
+      "file": "frame_002.png",
+      "x": 171,
+      "y": 218,
+      "width": 49,
+      "height": 60
+    },
+    {
+      "id": 2,
+      "file": "frame_003.png",
+      "x": 222,
+      "y": 155,
+      "width": 37,
+      "height": 62
+    },
+    {
+      "id": 3,
+      "file": "frame_004.png",
+      "x": 261,
+      "y": 155,
+      "width": 49,
+      "height": 62
+    },
+    {
+      "id": 4,
+      "file": "frame_005.png",
+      "x": 310,
+      "y": 155,
+      "width": 53,
+      "height": 63
+    },
+    {
+      "id": 5,
+      "file": "frame_006.png",
+      "x": 222,
+      "y": 217,
+      "width": 41,
+      "height": 64
+    },
+    {
+      "id": 6,
+      "file": "frame_007.png",
+      "x": 315,
+      "y": 228,
+      "width": 48,
+      "height": 55
+    }
+  ]
+}
