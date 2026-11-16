@@ -10,7 +10,7 @@ import {
   getIdleFrame
 } from "../systems/spriteSheet.js";
 
-const CHAR5_PATH = "./assets/characters/Char5/";
+const CHAR5_PATH = "./assets/characters/Char4/";
 const CHAR5_FRAME_PATH = CHAR5_PATH + "frames/";
 
 const CHAR5_FRAME_FILES = [
@@ -20,9 +20,7 @@ const CHAR5_FRAME_FILES = [
   "frame_004.png",
   "frame_005.png",
   "frame_006.png",
-  "frame_007.png",
-  "frame_008.png",
-  "frame_010.png"
+  "frame_007.png"
 ];
 
 export class BattleScene extends Phaser.Scene {
