@@ -1,13 +1,12 @@
 
 import { SpriteProcessor } from "./SpriteProcessor.js";
-
 export class SpriteAnimator {
   constructor(scene) {
     this.scene = scene;
     this.processor = new SpriteProcessor();
   }
-  constructor(scene) {
-    this.scene = scene;
+
+  setCharacterFrame(sprite, file, frameTextures) {
   }
 
   setCharacterFrame(sprite, file, frameTextures) {
