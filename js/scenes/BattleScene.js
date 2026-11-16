@@ -10,6 +10,21 @@ import {
   getIdleFrame
 } from "../systems/spriteSheet.js";
 
+const CHAR5_PATH = "./assets/characters/Char5/";
+const CHAR5_FRAME_PATH = CHAR5_PATH + "frames/";
+
+const CHAR5_FRAME_FILES = [
+  "frame_001.png",
+  "frame_002.png",
+  "frame_003.png",
+  "frame_004.png",
+  "frame_005.png",
+  "frame_006.png",
+  "frame_007.png",
+  "frame_008.png",
+  "frame_010.png"
+];
+
 export class BattleScene extends Phaser.Scene {
   constructor() {
     super("BattleScene");
@@ -18,7 +33,6 @@ export class BattleScene extends Phaser.Scene {
     this.moveTiles = [];
     this.battleInProgress = false;
 
-    // TURN SYSTEM
     this.turnNumber = 1;
     this.turnPhase = "player";
     this.turnTransitioning = false;
@@ -27,15 +41,51 @@ export class BattleScene extends Phaser.Scene {
       player: null,
       enemy: null
     };
+
+    this.char5Manifest = null;
+    this.char5FrameTextures = new Map();
+    this.char5Ready = false;
   }
+
+  // ==========================================
+  // PRELOAD
+  // ==========================================
 
   preload() {
-    this.load.image("char1", "./assets/characters/Char1.jpg");
-    this.load.image("char2", "./assets/characters/Char2.png");
+    this.load.image(
+      "char1",
+      "./assets/characters/Char1.jpg"
+    );
+
+    this.load.image(
+      "char2",
+      "./assets/characters/Char2.png"
+    );
+
+    this.load.json(
+      "char5Manifest",
+      CHAR5_PATH + "manifest.json"
+    );
+
+    CHAR5_FRAME_FILES.forEach(file => {
+      const key = this.getChar5TextureKey(file);
+
+      this.load.image(
+        key,
+        CHAR5_FRAME_PATH + file
+      );
+    });
   }
 
+  getChar5TextureKey(file) {
+    return "char5_" + file.replace(".png", "");
+  }
+
+  // ==========================================
+  // CREATE
+  // ==========================================
+
   create() {
-    // Khởi tạo trạng thái lượt cho tất cả đơn vị.
     this.resetUnitTurnStates();
 
     this.graphics = this.add.graphics();
@@ -44,6 +94,7 @@ export class BattleScene extends Phaser.Scene {
     this.createUnits();
     this.createBattleScreen();
     this.createTurnUI();
+
     this.prepareSprites();
 
     this.input.on("pointerdown", p => {
@@ -54,7 +105,6 @@ export class BattleScene extends Phaser.Scene {
         return;
       }
 
-      // Không xử lý click bản đồ khi bấm nút kết thúc lượt.
       if (
         this.endTurnButton &&
         this.endTurnButton.getBounds().contains(p.x, p.y)
@@ -219,9 +269,7 @@ export class BattleScene extends Phaser.Scene {
     this.updateTurnUI();
 
     try {
-      // Chuyển sang lượt địch.
       this.turnPhase = "enemy";
-
       this.updateTurnUI();
 
       this.log("=== LƯỢT ĐỊCH BẮT ĐẦU ===");
@@ -231,7 +279,6 @@ export class BattleScene extends Phaser.Scene {
 
       this.log("Phe địch đã hoàn thành lượt.");
 
-      // Chuyển lại lượt người chơi.
       this.turnNumber += 1;
       this.turnPhase = "player";
 
@@ -269,20 +316,54 @@ export class BattleScene extends Phaser.Scene {
     try {
       await Promise.all([
         this.loadTextureReady("char1"),
-        this.loadTextureReady("char2")
+        this.loadTextureReady("char2"),
+        this.loadTextureReady("char5Manifest"),
+        ...CHAR5_FRAME_FILES.map(file =>
+          this.loadTextureReady(this.getChar5TextureKey(file))
+        )
       ]);
 
-      this.animations.player = autoSlice(
-        this.textures.get("char1").getSourceImage()
-      );
+      const manifest = this.cache.json.get("char5Manifest");
+
+      this.validateChar5Manifest(manifest);
+
+      this.char5Manifest = manifest;
+      this.char5FrameTextures.clear();
+
+      for (const frame of manifest.frames) {
+        const key = this.getChar5TextureKey(frame.file);
+
+        if (!this.textures.exists(key)) {
+          throw new Error(
+            "Không tìm thấy texture Char5: " + frame.file
+          );
+        }
+
+        this.char5FrameTextures.set(
+          frame.file,
+          key
+        );
+      }
+
+      this.animations.player = {
+        type: "manifest",
+        attack: manifest.animations.attack.frames,
+        return: manifest.animations.return.frames,
+        frameDurationMs: manifest.frameDurationMs || 50
+      };
 
       this.animations.enemy = autoSlice(
         this.textures.get("char2").getSourceImage()
       );
 
-      this.setFrame(
+      this.char5Ready = true;
+
+      const idleFile =
+        manifest.animations.attack.frames[0];
+
+      this.setChar5Frame(
         this.attackerSprite,
-        getIdleFrame(this.animations.player)
+        idleFile
       );
 
       this.setFrame(
@@ -290,18 +371,72 @@ export class BattleScene extends Phaser.Scene {
         getIdleFrame(this.animations.enemy)
       );
 
+      this.log("Đã tải Char5 và manifest animation.");
+
     } catch (error) {
+      this.char5Ready = false;
+
       console.error(
         "Không thể chuẩn bị battle sprites:",
         error
       );
 
-      this.log("Lỗi tải hình ảnh chiến đấu.");
+      this.log(
+        "Lỗi tải Char5: " + error.message
+      );
+    }
+  }
+
+  validateChar5Manifest(manifest) {
+    if (
+      !manifest ||
+      manifest.format !== "FE8_SPRITE_ANIMATION_V1"
+    ) {
+      throw new Error("Manifest Char5 không đúng định dạng.");
+    }
+
+    if (
+      !Array.isArray(manifest.frames) ||
+      !manifest.animations ||
+      !Array.isArray(manifest.animations.attack?.frames) ||
+      !Array.isArray(manifest.animations.return?.frames)
+    ) {
+      throw new Error("Manifest Char5 thiếu dữ liệu animation.");
+    }
+
+    const available = new Set(
+      manifest.frames.map(frame => frame.file)
+    );
+
+    const usedFrames = [
+      ...manifest.animations.attack.frames,
+      ...manifest.animations.return.frames
+    ];
+
+    for (const file of usedFrames) {
+      if (!available.has(file)) {
+        throw new Error(
+          "Frame không có trong manifest: " + file
+        );
+      }
+    }
+
+    for (const frame of manifest.frames) {
+      if (!this.textures.exists(
+        this.getChar5TextureKey(frame.file)
+      )) {
+        throw new Error(
+          "Thiếu file ảnh: " + frame.file
+        );
+      }
     }
   }
 
   loadTextureReady(key) {
-    if (this.textures.exists(key)) {
+    if (
+      this.textures.exists(key) ||
+      this.cache.json.exists(key)
+    ) {
       return Promise.resolve();
     }
 
@@ -498,10 +633,6 @@ export class BattleScene extends Phaser.Scene {
         u.hp > 0
     );
 
-    // ----------------------------------------
-    // CHỌN ĐƠN VỊ NGƯỜI CHƠI
-    // ----------------------------------------
-
     if (target && target.team === "player") {
       if (!this.canUnitAct(target)) {
         this.log(
@@ -543,21 +674,12 @@ export class BattleScene extends Phaser.Scene {
       return;
     }
 
-    // ----------------------------------------
-    // TẤN CÔNG KẺ ĐỊCH
-    // ----------------------------------------
-
-    if (
-      target &&
-      target.team === "enemy"
-    ) {
+    if (target && target.team === "enemy") {
       const distance =
         Math.abs(attacker.x - target.x) +
         Math.abs(attacker.y - target.y);
 
       if (distance === 1) {
-        // Đánh dấu đã hành động trước khi bắt đầu battle.
-        // Tránh việc lỗi animation khiến đơn vị được đánh lại.
         attacker.hasActed = true;
 
         this.selectedUnit = null;
@@ -574,10 +696,6 @@ export class BattleScene extends Phaser.Scene {
       this.log("Kẻ địch nằm ngoài tầm tấn công.");
       return;
     }
-
-    // ----------------------------------------
-    // DI CHUYỂN
-    // ----------------------------------------
 
     if (
       this.canUnitMove(attacker) &&
@@ -607,18 +725,12 @@ export class BattleScene extends Phaser.Scene {
         }
       });
 
-      // Giữ đơn vị được chọn để người chơi có thể
-      // click vào kẻ địch ở ô liền kề để tấn công.
       this.selectedUnit = attacker;
 
       this.drawGrid();
 
       return;
     }
-
-    // ----------------------------------------
-    // CLICK Ô KHÔNG HỢP LỆ
-    // ----------------------------------------
 
     if (
       attacker.hasMoved &&
@@ -757,8 +869,28 @@ export class BattleScene extends Phaser.Scene {
   // SPRITE FRAME
   // ==========================================
 
+  setChar5Frame(sprite, file) {
+    if (!sprite || !file) return false;
+
+    const textureKey = this.char5FrameTextures.get(file);
+
+    if (!textureKey || !this.textures.exists(textureKey)) {
+      console.warn("Char5 frame không tồn tại:", file);
+      return false;
+    }
+
+    sprite.setTexture(textureKey);
+    return true;
+  }
+
   setFrame(sprite, frame) {
     if (!frame || !sprite) return;
+
+    // Frame PNG riêng của Char5.
+    if (frame.file && this.char5FrameTextures.has(frame.file)) {
+      this.setChar5Frame(sprite, frame.file);
+      return;
+    }
 
     const key =
       sprite === this.attackerSprite
@@ -886,6 +1018,17 @@ export class BattleScene extends Phaser.Scene {
     }
   }
 
+  async playChar5Frames(sprite, files, delay = 50) {
+    if (!Array.isArray(files) || files.length === 0) {
+      return;
+    }
+
+    for (const file of files) {
+      this.setChar5Frame(sprite, file);
+      await this.wait(delay);
+    }
+  }
+
   wait(ms) {
     return new Promise(resolve => {
       this.time.delayedCall(ms, resolve);
@@ -960,7 +1103,6 @@ export class BattleScene extends Phaser.Scene {
 
     try {
       await this.wait(duration);
-
     } finally {
       this.tweens.resumeAll();
     }
@@ -1067,6 +1209,12 @@ export class BattleScene extends Phaser.Scene {
     this.updateTurnUI();
 
     try {
+      if (!this.char5Ready) {
+        throw new Error(
+          "Char5 chưa sẵn sàng. Kiểm tra manifest và thư mục frames."
+        );
+      }
+
       this.battleUI.setVisible(true);
 
       atk.sprite.setVisible(false);
@@ -1084,9 +1232,9 @@ export class BattleScene extends Phaser.Scene {
         .setAlpha(1)
         .clearTint();
 
-      this.setFrame(
+      this.setChar5Frame(
         this.attackerSprite,
-        getIdleFrame(this.animations.player)
+        this.animations.player.attack[0]
       );
 
       this.setFrame(
@@ -1135,8 +1283,7 @@ export class BattleScene extends Phaser.Scene {
         );
       }
 
-      // 3. Bên có AS cao hơn ít nhất 4 điểm
-      // được đánh bồi sau đòn phản công.
+      // 3. Đánh bồi.
       if (atk.hp > 0 && def.hp > 0) {
         if (pv.attacker.double) {
           this.battleMessage.setText(
@@ -1168,7 +1315,6 @@ export class BattleScene extends Phaser.Scene {
         }
       }
 
-      // 4. Kết quả trận đấu.
       this.battleMessage.setText(
         def.hp <= 0
           ? def.name + " GỤC NGÃ!"
@@ -1186,13 +1332,15 @@ export class BattleScene extends Phaser.Scene {
       );
 
       this.log(
-        "Có lỗi trong trận đấu. Đã khôi phục trạng thái."
+        "Lỗi trận đấu: " + error.message
       );
 
     } finally {
       this.tweens.resumeAll();
 
-      this.battleUI.setVisible(false);
+      if (this.battleUI) {
+        this.battleUI.setVisible(false);
+      }
 
       this.attackerSprite
         .setVisible(false)
@@ -1211,7 +1359,6 @@ export class BattleScene extends Phaser.Scene {
 
         atk.hpBar.width =
           32 * (atk.hp / atk.maxHp);
-
       } else {
         atk.sprite.setVisible(false);
       }
@@ -1221,7 +1368,6 @@ export class BattleScene extends Phaser.Scene {
 
         def.hpBar.width =
           32 * (def.hp / def.maxHp);
-
       } else {
         def.sprite.setVisible(false);
       }
@@ -1255,150 +1401,52 @@ export class BattleScene extends Phaser.Scene {
     const targetX =
       defenderStartX + (isLeft ? -55 : 55);
 
-    // Tính kết quả trên bản sao.
-    // Không thay đổi HP thật tại đây.
     const result = resolveStrike(
       { ...atk },
       { ...def },
       stats
     );
 
-    const rows = anim || [];
-
-    const r0 = rows[0]?.frames || [];
-    const r1 = rows[1]?.frames || [];
-    const r2 = rows[2]?.frames || [];
-    const r3 = rows[3]?.frames || [];
-
-    // 0: idle/windup
-    // 1: attack
-    // 2: critical
-    // 3: dodge
-
-    const attackFrames = (
-      result.crit && r2.length
-        ? r2.slice(0, 10)
-        : r1.slice(0, 6)
-    );
-
     try {
-      // Windup.
-      await this.playFrames(
-        atkSp,
-        r0.slice(1, 5),
-        45
-      );
-
-      // Di chuyển và animation chạy song song.
-      const movement = this.runTween({
-        targets: atkSp,
-        x: targetX,
-        duration: 220,
-        ease: "Power2"
-      });
-
-      const attackAnimation = this.playFrames(
-        atkSp,
-        attackFrames,
-        55
-      );
-
-      // Xác định thời điểm va chạm.
-      const impactFrame = Math.min(
-        2,
-        Math.max(0, attackFrames.length - 1)
-      );
-
-      await this.wait(
-        impactFrame * 55 + 30
-      );
-
-      if (result.hit) {
-        // HP chỉ trừ đúng một lần tại đây.
-        def.hp = Math.max(
-          0,
-          def.hp - result.damage
-        );
-
-        this.battleMessage.setText(
-          result.crit
-            ? `${atk.name} CHÍ MẠNG!`
-            : `${atk.name} TRÚNG ĐÒN!`
-        );
-
-        // Hit-stop.
-        await this.hitStop(
-          result.crit ? 65 : 45
-        );
-
-        // Rung màn hình.
-        this.cameras.main.shake(
-          result.crit ? 180 : 90,
-          result.crit ? 0.025 : 0.012
-        );
-
-        this.updateBattleHP(atk, def);
-
-        this.log(
-          `${atk.name} đánh trúng ${def.name}, mất ${result.damage} HP.`
-        );
-
-        // Hiệu ứng nhận sát thương.
-        await this.hitEffect(
+      if (anim?.type === "manifest") {
+        await this.performChar5Strike(
+          atk,
+          def,
+          result,
+          atkSp,
           defSp,
+          anim,
+          startX,
           defenderStartX,
-          isLeft,
-          !!result.crit,
-          def.hp <= 0
+          targetX,
+          isLeft
         );
-
-        if (def.hp <= 0) {
-          this.log(
-            def.name + " đã bị hạ gục!"
-          );
-        }
 
       } else {
-        this.battleMessage.setText(
-          atk.name + " ĐÁNH TRƯỢT!"
+        await this.performLegacyStrike(
+          atk,
+          def,
+          result,
+          atkSp,
+          defSp,
+          anim,
+          startX,
+          defenderStartX,
+          targetX,
+          isLeft
         );
-
-        this.log(
-          atk.name + " đánh trượt!"
-        );
-
-        // Hàng 3 là animation né.
-        if (r3.length) {
-          await this.playFrames(
-            defSp,
-            r3.slice(0, 4),
-            40
-          );
-        }
-
-        await this.runTween({
-          targets: defSp,
-
-          x: defenderStartX + (
-            isLeft ? 22 : -22
-          ),
-
-          duration: 110,
-          yoyo: true,
-          ease: "Quad.easeOut"
-        }, 400);
       }
 
-      // Đợi cả animation và chuyển động hoàn tất.
-      await Promise.all([
-        attackAnimation,
-        movement
-      ]);
+    } catch (error) {
+      console.error("Strike animation error:", error);
+
+      this.log(
+        "Lỗi animation đòn đánh. Đã tiếp tục xử lý trận đấu."
+      );
 
     } finally {
       this.tweens.resumeAll();
 
-      // Trả người tấn công về vị trí ban đầu.
       await this.runTween({
         targets: atkSp,
         x: startX,
@@ -1411,10 +1459,15 @@ export class BattleScene extends Phaser.Scene {
         .clearTint();
 
       if (atk.hp > 0) {
-        this.setFrame(
-          atkSp,
-          r0[0] || getIdleFrame(anim)
-        );
+        if (anim?.type === "manifest") {
+          this.setChar5Frame(
+            atkSp,
+            anim.attack[0]
+          );
+        } else {
+          const idle = getIdleFrame(anim);
+          if (idle) this.setFrame(atkSp, idle);
+        }
       }
 
       if (def.hp > 0) {
@@ -1430,6 +1483,305 @@ export class BattleScene extends Phaser.Scene {
   }
 
   // ==========================================
+  // CHAR5 STRIKE
+  // ==========================================
+
+  async performChar5Strike(
+    atk,
+    def,
+    result,
+    atkSp,
+    defSp,
+    anim,
+    startX,
+    defenderStartX,
+    targetX,
+    isLeft
+  ) {
+    const delay = anim.frameDurationMs || 50;
+
+    const attackFrames = anim.attack || [];
+    const returnFrames = anim.return || [];
+
+    if (!attackFrames.length) {
+      throw new Error("Char5 không có attack frames.");
+    }
+
+    // Chọn frame đầu tiên làm trạng thái chuẩn bị.
+    this.setChar5Frame(
+      atkSp,
+      attackFrames[0]
+    );
+
+    await this.wait(delay);
+
+    // Di chuyển và animation tấn công chạy song song.
+    const movement = this.runTween({
+      targets: atkSp,
+      x: targetX,
+      duration: 220,
+      ease: "Power2"
+    }, 1000);
+
+    const attackAnimation = this.playChar5Frames(
+      atkSp,
+      attackFrames,
+      delay
+    );
+
+    // Chạm mục tiêu ở gần frame cuối của pha lao tới.
+    const impactIndex = Math.min(
+      8,
+      Math.max(0, attackFrames.length - 1)
+    );
+
+    await this.wait(
+      impactIndex * delay + 20
+    );
+
+    // HP chỉ được thay đổi một lần tại điểm va chạm.
+    if (result.hit) {
+      def.hp = Math.max(
+        0,
+        def.hp - result.damage
+      );
+
+      this.battleMessage.setText(
+        result.crit
+          ? `${atk.name} CHÍ MẠNG!`
+          : `${atk.name} TRÚNG ĐÒN!`
+      );
+
+      await this.hitStop(
+        result.crit ? 65 : 45
+      );
+
+      this.cameras.main.shake(
+        result.crit ? 180 : 90,
+        result.crit ? 0.025 : 0.012
+      );
+
+      this.updateBattleHP(atk, def);
+
+      this.log(
+        `${atk.name} đánh trúng ${def.name}, mất ${result.damage} HP.`
+      );
+
+      await this.hitEffect(
+        defSp,
+        defenderStartX,
+        isLeft,
+        !!result.crit,
+        def.hp <= 0
+      );
+
+      if (def.hp <= 0) {
+        this.log(
+          def.name + " đã bị hạ gục!"
+        );
+      }
+
+    } else {
+      this.battleMessage.setText(
+        atk.name + " ĐÁNH TRƯỢT!"
+      );
+
+      this.log(
+        atk.name + " đánh trượt!"
+      );
+
+      // Địch né đòn bằng chuyển động ngắn.
+      await this.runTween({
+        targets: defSp,
+        x: defenderStartX + (
+          isLeft ? 22 : -22
+        ),
+        duration: 110,
+        yoyo: true,
+        ease: "Quad.easeOut"
+      }, 400);
+    }
+
+    // Chờ cả chuyển động và animation đánh hoàn tất.
+    await Promise.all([
+      movement,
+      attackAnimation
+    ]);
+
+    // Lui về bằng chuỗi frame return trong manifest.
+    if (returnFrames.length) {
+      const retreatMovement = this.runTween({
+        targets: atkSp,
+        x: startX,
+        duration: Math.max(
+          180,
+          returnFrames.length * delay
+        ),
+        ease: "Power2"
+      }, 1500);
+
+      const retreatAnimation = this.playChar5Frames(
+        atkSp,
+        returnFrames,
+        delay
+      );
+
+      await Promise.all([
+        retreatMovement,
+        retreatAnimation
+      ]);
+    } else {
+      await this.runTween({
+        targets: atkSp,
+        x: startX,
+        duration: 170,
+        ease: "Power2"
+      }, 900);
+    }
+
+    this.setChar5Frame(
+      atkSp,
+      attackFrames[0]
+    );
+  }
+
+  // ==========================================
+  // LEGACY ENEMY STRIKE
+  // ==========================================
+
+  async performLegacyStrike(
+    atk,
+    def,
+    result,
+    atkSp,
+    defSp,
+    anim,
+    startX,
+    defenderStartX,
+    targetX,
+    isLeft
+  ) {
+    const rows = anim || [];
+
+    const r0 = rows[0]?.frames || [];
+    const r1 = rows[1]?.frames || [];
+    const r2 = rows[2]?.frames || [];
+    const r3 = rows[3]?.frames || [];
+
+    const attackFrames = (
+      result.crit && r2.length
+        ? r2.slice(0, 10)
+        : r1.slice(0, 6)
+    );
+
+    await this.playFrames(
+      atkSp,
+      r0.slice(1, 5),
+      45
+    );
+
+    const movement = this.runTween({
+      targets: atkSp,
+      x: targetX,
+      duration: 220,
+      ease: "Power2"
+    });
+
+    const attackAnimation = this.playFrames(
+      atkSp,
+      attackFrames,
+      55
+    );
+
+    const impactFrame = Math.min(
+      2,
+      Math.max(0, attackFrames.length - 1)
+    );
+
+    await this.wait(
+      impactFrame * 55 + 30
+    );
+
+    if (result.hit) {
+      def.hp = Math.max(
+        0,
+        def.hp - result.damage
+      );
+
+      this.battleMessage.setText(
+        result.crit
+          ? `${atk.name} CHÍ MẠNG!`
+          : `${atk.name} TRÚNG ĐÒN!`
+      );
+
+      await this.hitStop(
+        result.crit ? 65 : 45
+      );
+
+      this.cameras.main.shake(
+        result.crit ? 180 : 90,
+        result.crit ? 0.025 : 0.012
+      );
+
+      this.updateBattleHP(atk, def);
+
+      this.log(
+        `${atk.name} đánh trúng ${def.name}, mất ${result.damage} HP.`
+      );
+
+      await this.hitEffect(
+        defSp,
+        defenderStartX,
+        isLeft,
+        !!result.crit,
+        def.hp <= 0
+      );
+
+      if (def.hp <= 0) {
+        this.log(
+          def.name + " đã bị hạ gục!"
+        );
+      }
+
+    } else {
+      this.battleMessage.setText(
+        atk.name + " ĐÁNH TRƯỢT!"
+      );
+
+      this.log(
+        atk.name + " đánh trượt!"
+      );
+
+      if (r3.length) {
+        await this.playFrames(
+          defSp,
+          r3.slice(0, 4),
+          40
+        );
+      }
+
+      await this.runTween({
+        targets: defSp,
+        x: defenderStartX + (
+          isLeft ? 22 : -22
+        ),
+        duration: 110,
+        yoyo: true,
+        ease: "Quad.easeOut"
+      }, 400);
+    }
+
+    await Promise.all([
+      attackAnimation,
+      movement
+    ]);
+
+    if (r0[0]) {
+      this.setFrame(atkSp, r0[0]);
+    }
+  }
+
+  // ==========================================
   // BATTLE LOG
   // ==========================================
 
@@ -1438,7 +1790,6 @@ export class BattleScene extends Phaser.Scene {
 
     if (box) {
       box.innerHTML += "<br>> " + message;
-
       box.scrollTop = box.scrollHeight;
     }
   }
