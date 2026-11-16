@@ -1,4 +1,5 @@
 import { SpriteManager } from "../systems/sprites/SpriteManager.js";
+import { UnitActionMenu } from "../systems/ui/UnitActionMenu.js";
 import { TILE, GRID } from "../config.js";
 import { unitsData } from "../data/units.js";
 import {
@@ -6,6 +7,7 @@ import {
   resolveStrike
 } from "../fe8Logic.js";
 import { getIdleFrame } from "../systems/spriteSheet.js";
+
 const CHAR5_PATH = "./assets/characters/Char4/";
 const CHAR5_FRAME_PATH = CHAR5_PATH + "frames/";
 
@@ -22,23 +24,24 @@ const CHAR5_FRAME_FILES = [
 export class BattleScene extends Phaser.Scene {
   constructor() {
     super("BattleScene");
-    
+
     this.selectedUnit = null;
     this.moveTiles = [];
     this.battleInProgress = false;
+    this.actionMode = null;
 
     this.turnNumber = 1;
     this.turnPhase = "player";
     this.turnTransitioning = false;
-    
 
-        this.spriteManager = new SpriteManager(this, {
+    this.spriteManager = new SpriteManager(this, {
       frameFiles: CHAR5_FRAME_FILES,
       getTextureKey: file =>
         this.getChar5TextureKey(file)
     });
 
     this.animations = this.spriteManager.animations;
+    this.actionMenu = null;
   }
 
   // ==========================================
@@ -89,6 +92,11 @@ export class BattleScene extends Phaser.Scene {
     this.createBattleScreen();
     this.createTurnUI();
 
+    this.actionMenu = new UnitActionMenu(
+      this,
+      action => this.handleUnitAction(action)
+    );
+
     this.prepareSprites();
 
     this.input.on("pointerdown", p => {
@@ -102,6 +110,13 @@ export class BattleScene extends Phaser.Scene {
       if (
         this.endTurnButton &&
         this.endTurnButton.getBounds().contains(p.x, p.y)
+      ) {
+        return;
+      }
+
+      if (
+        this.actionMenu &&
+        this.actionMenu.contains(p.x, p.y)
       ) {
         return;
       }
@@ -156,6 +171,112 @@ export class BattleScene extends Phaser.Scene {
       !unit.hasActed
     );
   }
+
+  // ==========================================
+  // UNIT ACTION MENU
+  // ==========================================
+
+  showUnitActionMenu(unit) {
+    if (!this.actionMenu || !unit) return;
+
+    this.actionMenu.show(unit, [
+      {
+        id: "move",
+        label: "Di chuyển",
+        enabled: this.canUnitMove(unit)
+      },
+      {
+        id: "attack",
+        label: "Tấn công",
+        enabled: this.canUnitAct(unit)
+      },
+      {
+        id: "wait",
+        label: "Đợi",
+        enabled: this.canUnitAct(unit)
+      }
+    ]);
+
+    // UnitActionMenu ban đầu dùng TILE = 32.
+    // Điều chỉnh tọa độ theo kích thước ô thực tế.
+    const width = 112;
+    const height = 87;
+
+    const x = Math.min(
+      Math.max(4, unit.x * TILE + TILE),
+      384 - width - 4
+    );
+
+    const y = Math.min(
+      Math.max(4, unit.y * TILE),
+      384 - height - 4
+    );
+
+    this.actionMenu.container.setPosition(x, y);
+  }
+
+  hideUnitActionMenu() {
+    if (this.actionMenu) {
+      this.actionMenu.hide();
+    }
+  }
+
+  handleUnitAction(action) {
+    const unit = this.selectedUnit;
+
+    if (
+      !unit ||
+      !this.canUnitAct(unit) ||
+      this.battleInProgress ||
+      this.turnTransitioning
+    ) {
+      return;
+    }
+
+    switch (action) {
+      case "move":
+        if (!this.canUnitMove(unit)) {
+          this.log("Đơn vị này không thể di chuyển.");
+          return;
+        }
+
+        this.hideUnitActionMenu();
+        this.actionMode = "move";
+        this.moveTiles = this.getAvailableMoveTiles(unit);
+        this.drawGrid();
+
+        this.log("Chọn ô muốn di chuyển.");
+        break;
+
+      case "attack":
+        this.hideUnitActionMenu();
+        this.actionMode = "attack";
+        this.moveTiles = [];
+        this.drawGrid();
+
+        this.log("Chọn kẻ địch liền kề để tấn công.");
+        break;
+
+      case "wait":
+        unit.hasActed = true;
+
+        this.hideUnitActionMenu();
+
+        this.selectedUnit = null;
+        this.moveTiles = [];
+        this.actionMode = null;
+
+        this.drawGrid();
+        this.updateTurnUI();
+
+        this.log(unit.name + " đã đợi.");
+        break;
+    }
+  }
+
+  // ==========================================
+  // TURN UI
+  // ==========================================
 
   createTurnUI() {
     this.turnUI = this.add.container(0, 0)
@@ -256,8 +377,10 @@ export class BattleScene extends Phaser.Scene {
 
     this.turnTransitioning = true;
 
+    this.hideUnitActionMenu();
     this.selectedUnit = null;
     this.moveTiles = [];
+    this.actionMode = null;
 
     this.drawGrid();
     this.updateTurnUI();
@@ -294,8 +417,10 @@ export class BattleScene extends Phaser.Scene {
     } finally {
       this.turnTransitioning = false;
 
+      this.hideUnitActionMenu();
       this.selectedUnit = null;
       this.moveTiles = [];
+      this.actionMode = null;
 
       this.drawGrid();
       this.updateTurnUI();
@@ -306,14 +431,17 @@ export class BattleScene extends Phaser.Scene {
   // SPRITE PREPARATION
   // ==========================================
 
-    async prepareSprites() {
+  async prepareSprites() {
     try {
       const result = await this.spriteManager.prepare(
         this.attackerSprite,
         this.defenderSprite
       );
 
-      console.log("[SpriteManager] Đã chuẩn bị sprite:", result);
+      console.log(
+        "[SpriteManager] Đã chuẩn bị sprite:",
+        result
+      );
 
       this.log("Đã tải Char4 và sprite Char2.");
 
@@ -329,7 +457,7 @@ export class BattleScene extends Phaser.Scene {
         "Lỗi tải sprite: " + error.message
       );
     }
-    }
+  }
 
   // ==========================================
   // MAP
@@ -483,26 +611,26 @@ export class BattleScene extends Phaser.Scene {
         u.hp > 0
     );
 
+    // Chọn đơn vị người chơi.
     if (target && target.team === "player") {
       if (!this.canUnitAct(target)) {
         this.log(
           target.name + " đã hoàn thành hành động lượt này."
         );
-
         return;
       }
 
       this.selectedUnit = target;
-
-      this.moveTiles = this.canUnitMove(target)
-        ? this.getAvailableMoveTiles(target)
-        : [];
+      this.actionMode = null;
+      this.moveTiles = [];
 
       this.drawGrid();
+      this.showUnitActionMenu(target);
 
       if (target.hasMoved) {
         this.log(
-          target.name + " đã di chuyển. Có thể tiếp tục tấn công."
+          target.name +
+          " đã di chuyển. Có thể tiếp tục tấn công hoặc đợi."
         );
       } else {
         this.log("Đã chọn " + target.name);
@@ -511,55 +639,81 @@ export class BattleScene extends Phaser.Scene {
       return;
     }
 
-    if (!this.selectedUnit) {
+    if (!this.selectedUnit || !this.actionMode) {
       return;
     }
 
     const attacker = this.selectedUnit;
 
     if (!this.canUnitAct(attacker)) {
+      this.hideUnitActionMenu();
       this.selectedUnit = null;
       this.moveTiles = [];
+      this.actionMode = null;
       this.drawGrid();
       return;
     }
 
-    if (target && target.team === "enemy") {
+    // ========================================
+    // ATTACK MODE
+    // ========================================
+
+    if (this.actionMode === "attack") {
+      if (!target || target.team !== "enemy") {
+        this.log("Hãy chọn một kẻ địch.");
+        return;
+      }
+
       const distance =
         Math.abs(attacker.x - target.x) +
         Math.abs(attacker.y - target.y);
 
-      if (distance === 1) {
-        attacker.hasActed = true;
-
-        this.selectedUnit = null;
-        this.moveTiles = [];
-
-        this.drawGrid();
-        this.updateTurnUI();
-
-        this.startBattle(attacker, target);
-
+      if (distance !== 1) {
+        this.log("Kẻ địch nằm ngoài tầm tấn công.");
         return;
       }
 
-      this.log("Kẻ địch nằm ngoài tầm tấn công.");
+      attacker.hasActed = true;
+
+      this.hideUnitActionMenu();
+      this.selectedUnit = null;
+      this.moveTiles = [];
+      this.actionMode = null;
+
+      this.drawGrid();
+      this.updateTurnUI();
+
+      this.startBattle(attacker, target);
       return;
     }
 
-    if (
-      this.canUnitMove(attacker) &&
-      this.moveTiles.some(
-        tile => tile.x === gx && tile.y === gy
-      ) &&
-      !target
-    ) {
-      attacker.hasMoved = true;
+    // ========================================
+    // MOVE MODE
+    // ========================================
 
+    if (this.actionMode === "move") {
+      if (target) {
+        this.log("Ô này đang có đơn vị chiếm giữ.");
+        return;
+      }
+
+      const isValidMove = this.moveTiles.some(
+        tile => tile.x === gx && tile.y === gy
+      );
+
+      if (!isValidMove) {
+        this.log("Không thể di chuyển đến ô này.");
+        return;
+      }
+
+      attacker.hasMoved = true;
       attacker.x = gx;
       attacker.y = gy;
 
       this.moveTiles = [];
+      this.actionMode = null;
+
+      this.drawGrid();
 
       this.tweens.add({
         targets: attacker.sprite,
@@ -568,32 +722,24 @@ export class BattleScene extends Phaser.Scene {
         duration: 200,
         ease: "Power2",
         onComplete: () => {
-          this.log(
-            attacker.name +
-            " đã di chuyển. Có thể tiếp tục tấn công."
-          );
+          if (
+            this.selectedUnit === attacker &&
+            !attacker.hasActed
+          ) {
+            this.log(
+              attacker.name +
+              " đã di chuyển. Chọn hành động tiếp theo."
+            );
+
+            this.showUnitActionMenu(attacker);
+          }
         }
       });
 
-      this.selectedUnit = attacker;
-
-      this.drawGrid();
-
       return;
     }
-
-    if (
-      attacker.hasMoved &&
-      !attacker.hasActed
-    ) {
-      this.log(
-        attacker.name +
-        " đã di chuyển. Hãy chọn kẻ địch liền kề để tấn công."
-      );
-    }
   }
-
-  // ==========================================
+    // ==========================================
   // BATTLE SCREEN
   // ==========================================
 
@@ -721,7 +867,7 @@ export class BattleScene extends Phaser.Scene {
   // SPRITE FRAME
   // ==========================================
 
-    setChar5Frame(sprite, file) {
+  setChar5Frame(sprite, file) {
     return this.spriteManager.setCharacterFrame(
       sprite,
       file
@@ -937,10 +1083,11 @@ export class BattleScene extends Phaser.Scene {
     if (this.battleInProgress) return;
 
     this.battleInProgress = true;
+    this.hideUnitActionMenu();
     this.updateTurnUI();
 
     try {
-    if (!this.spriteManager.ready) {
+      if (!this.spriteManager.ready) {
         throw new Error(
           "Char5 chưa sẵn sàng. Kiểm tra manifest và thư mục frames."
         );
@@ -1211,9 +1358,8 @@ export class BattleScene extends Phaser.Scene {
 
       await this.wait(80);
     }
-  }
-
-  // ==========================================
+            }
+    // ==========================================
   // CHAR5 STRIKE
   // ==========================================
 
@@ -1320,9 +1466,6 @@ export class BattleScene extends Phaser.Scene {
       this.log(
         atk.name + " đánh trượt!"
       );
-
-      // Địch né đòn bằng chuyển động ngắn.
-      
     }
 
     // Chờ cả chuyển động và animation đánh hoàn tất.
@@ -1498,4 +1641,5 @@ export class BattleScene extends Phaser.Scene {
       box.scrollTop = box.scrollHeight;
     }
   }
-}
+      }
+  
