@@ -48,6 +48,17 @@ export const BATTLE_SPRITES = {
     reach: 125,
     roles: MOUNTED_ROLES,
     impact: { M1_0: 6, M1_1: 3, M1_8: 4 }
+  },
+
+  // Kỵ binh áo xanh, dựng theo bố cục Char6 (17 frame, cùng mã animation).
+  Char8: {
+    facing: "left",
+    scale: 1.25,
+    anchor: { x: 68, y: 116 },
+    rest: "f013",
+    reach: 125,
+    roles: MOUNTED_ROLES,
+    impact: { M1_0: 6, M1_1: 1, M1_8: 3 }
   }
 };
 
