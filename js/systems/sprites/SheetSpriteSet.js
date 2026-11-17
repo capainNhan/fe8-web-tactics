@@ -10,7 +10,7 @@ import { imageKey } from "./SpriteLoader.js";
  * Giao diện dùng bởi BattleScene:
  *   animation(role) -> { steps: [{ index, ms }], totalMs, impactMs } | null
  *   applyFrame(sprite, index)
- *   flipFor(slot), scale, idleFrame, stanceFrame, reach
+ *   flipFor(slot), scale, idleFrame, restFrame, reach
  */
 export class SheetSpriteSet {
   constructor(id, sheet, columns) {
@@ -82,13 +82,9 @@ export class SheetSpriteSet {
     return this.animation("idle").steps[0].index;
   }
 
-  // Frame cuối của animation "ready" = thế chiến đấu giữ giữa các đòn.
-  get stanceFrame() {
-    const ready = this.animation("ready");
-
-    return ready
-      ? ready.steps[ready.steps.length - 1].index
-      : this.idleFrame;
+  // Frame giữ giữa các đòn, sau khi bên này đã ra đòn.
+  get restFrame() {
+    return this.frameIndex(this.config.rest);
   }
 
   // Sprite bên "left" nhìn sang phải, bên "right" nhìn sang trái.

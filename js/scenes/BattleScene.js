@@ -23,7 +23,8 @@ const GROUND_Y = 316;
  * Cách giao chiến (theo battle của Tear Ring Saga):
  * - Bên tấn công phi tới sát đối thủ rồi ở yên đó, KHÔNG lui về.
  * - Bên bị đánh dù trúng hay né đều đứng tại chỗ, rồi phản công tại chỗ.
- * - Mỗi bên giữ thế chiến đấu giữa các đòn.
+ * - Đòn đánh nối thẳng từ lúc phi (M1_0 bắt đầu từ thế đứng nghiêng).
+ * - Né tránh dùng animation riêng M0_4; giữa các đòn giữ frame "rest".
  */
 export class BattleScene extends Phaser.Scene {
   constructor() {
@@ -426,10 +427,10 @@ export class BattleScene extends Phaser.Scene {
     atkSet.applyFrame(this.attackerSprite, atkSet.idleFrame);
     defSet.applyFrame(this.defenderSprite, defSet.idleFrame);
 
-    // Trạng thái từng bên: đã vào thế chiến đấu chưa, đã ra đòn mấy lần.
+    // Trạng thái từng bên: pose "idle" (đứng nghiêng) hoặc "ready" (đã quay mặt).
     this.fighters = new Map([
-      [this.attackerSprite, { ready: false, strikes: 0, approaches: true }],
-      [this.defenderSprite, { ready: false, strikes: 0, approaches: false }]
+      [this.attackerSprite, { pose: "idle", approaches: true }],
+      [this.defenderSprite, { pose: "idle", approaches: false }]
     ]);
 
     this.attackerName.setText(atk.name);
@@ -575,7 +576,7 @@ export class BattleScene extends Phaser.Scene {
 
         set.applyFrame(
           atkSp,
-          state?.ready ? set.stanceFrame : set.idleFrame
+          state?.pose === "ready" ? set.restFrame : set.idleFrame
         );
       }
 
@@ -592,59 +593,65 @@ export class BattleScene extends Phaser.Scene {
   }
 
   // ==========================================
-  // STANCE / APPROACH
+  // APPROACH / DODGE
   // ==========================================
 
-  // Đưa một bên vào thế chiến đấu. Bên chủ động phi tới sát đối thủ
-  // (chỉ lần đầu); bên phản công chỉ quay thế tại chỗ.
-  async enterStance(sp, set, state, targetX) {
-    if (state.ready) return;
-
-    if (state.approaches) {
-      const move = set.animation("move");
-      const distance = Math.abs(targetX - sp.x);
-
-      const gallop = move
-        ? this.startLoop(sp, set, move)
-        : null;
-
-      await this.runTween({
-        targets: sp,
-        x: targetX,
-        duration: Math.max(260, distance * 3.5),
-        ease: "Quad.easeOut"
-      }, 1500);
-
-      if (gallop) {
-        gallop.stop();
-        await gallop.done;
-      }
-
-      state.approaches = false;
-    }
-
-    const ready = set.animation("ready");
-
-    if (ready) {
-      await this.playSteps(sp, set, ready);
-    }
-
-    state.ready = true;
-
-    set.applyFrame(sp, set.stanceFrame);
+  setOf(sprite) {
+    return sprite === this.attackerSprite
+      ? this.atkSet
+      : this.defSet;
   }
 
-  // Bên bị đánh mà né được: lách nhẹ rồi về chỗ cũ.
-  async dodgeEffect(sprite, startX, isLeft) {
-    await this.runTween({
-      targets: sprite,
-      x: startX + (isLeft ? 14 : -14),
-      duration: 90,
-      yoyo: true,
-      ease: "Quad.easeOut"
-    }, 400);
+  // Bên chủ động phi tới sát đối thủ (chỉ lần đầu) rồi dừng lại.
+  // Không có thế "chuẩn bị" riêng: đòn đánh nối thẳng từ lúc phi.
+  async approach(sp, set, state, targetX) {
+    if (!state.approaches) return;
 
-    sprite.x = startX;
+    const move = set.animation("move");
+    const distance = Math.abs(targetX - sp.x);
+
+    const gallop = move
+      ? this.startLoop(sp, set, move)
+      : null;
+
+    await this.runTween({
+      targets: sp,
+      x: targetX,
+      duration: Math.max(260, distance * 3.5),
+      ease: "Quad.easeOut"
+    }, 1500);
+
+    if (gallop) {
+      gallop.stop();
+      await gallop.done;
+    }
+
+    state.approaches = false;
+  }
+
+  // Bên bị đánh trượt: chạy animation né (M0_4) tại chỗ, không đổi vị trí.
+  async playDodge(sprite, startX, isLeft) {
+    const set = this.setOf(sprite);
+    const state = this.fighters.get(sprite);
+    const dodge = set.animation("dodge");
+
+    if (!dodge) {
+      await this.runTween({
+        targets: sprite,
+        x: startX + (isLeft ? 14 : -14),
+        duration: 90,
+        yoyo: true,
+        ease: "Quad.easeOut"
+      }, 400);
+
+      sprite.x = startX;
+      return;
+    }
+
+    await this.playSteps(sprite, set, dodge);
+
+    // Giữ thế cuối của lần né cho tới khi phản công.
+    state.pose = "ready";
   }
 
   // ==========================================
@@ -664,16 +671,19 @@ export class BattleScene extends Phaser.Scene {
   ) {
     const state = this.fighters.get(atkSp);
 
-    // Chọn animation: chí mạng > đòn tiếp theo > đòn đầu.
-    let role = "attack";
+    // Chọn animation:
+    // - chí mạng: crit
+    // - đang đứng nghiêng (chưa ra đòn/né): attack, bắt đầu từ thế đứng
+    // - đã quay mặt (sau đòn trước hoặc sau khi né): attack2
+    let role = state.pose === "idle" ? "attack" : "attack2";
 
     if (result.hit && result.crit && set.hasAnimation("crit")) {
       role = "crit";
-    } else if (state.strikes > 0 && set.hasAnimation("attack2")) {
-      role = "attack2";
     }
 
-    const attack = set.animation(role);
+    const attack =
+      set.animation(role) ||
+      set.animation("attack");
 
     if (!attack) {
       throw new Error(
@@ -681,14 +691,14 @@ export class BattleScene extends Phaser.Scene {
       );
     }
 
-    state.strikes += 1;
-
-    await this.enterStance(atkSp, set, state, targetX);
+    await this.approach(atkSp, set, state, targetX);
 
     const attackAnimation = this.playSteps(atkSp, set, attack);
 
     // Chờ tới thời điểm va chạm (cộng dồn ms các bước trước impact).
     await this.wait(attack.impactMs + 20);
+
+    let dodgeAnimation = Promise.resolve();
 
     // HP chỉ được thay đổi một lần tại điểm va chạm.
     if (result.hit) {
@@ -741,13 +751,19 @@ export class BattleScene extends Phaser.Scene {
         atk.name + " đánh trượt!"
       );
 
-      await this.dodgeEffect(defSp, defenderStartX, isLeft);
+      dodgeAnimation = this.playDodge(
+        defSp,
+        defenderStartX,
+        isLeft
+      );
     }
 
-    // Chờ animation đánh chạy hết, rồi đứng yên tại chỗ.
-    await attackAnimation;
+    // Chờ đòn đánh và (nếu có) động tác né chạy hết, rồi đứng yên tại chỗ.
+    await Promise.all([attackAnimation, dodgeAnimation]);
 
-    set.applyFrame(atkSp, set.stanceFrame);
+    state.pose = "ready";
+
+    set.applyFrame(atkSp, set.restFrame);
   }
 
   // ==========================================

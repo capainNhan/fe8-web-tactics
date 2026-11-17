@@ -50,6 +50,10 @@ export function validateSheet(sheet, id) {
     }
   }
 
+  if (!sheet.frames[config.rest]) {
+    fail(`rest "${config.rest}" không có trong frames.`);
+  }
+
   return sheet;
 }
 

@@ -14,6 +14,7 @@
  *   anchor  : điểm chân (px trong ô frame), dùng chung mọi frame của sheet
  *   reach   : khoảng cách (px màn hình) từ mục tiêu tới chỗ bên tấn công dừng lại
  *   roles   : vai trò -> mã animation trong spritesheet.json
+ *   rest    : frame giữ giữa các đòn (thế đứng sau khi đã ra đòn)
  *   impact  : mã animation -> số thứ tự bước mà đòn chạm mục tiêu (bắt đầu từ 0)
  */
 
@@ -22,9 +23,9 @@ export const BATTLE_SPRITE_ROOT = "./assets/characters/";
 const MOUNTED_ROLES = {
   idle: "M0_0",    // đứng chờ trước trận
   move: "M0_1",    // phi nước đại (lặp)
-  ready: "M0_4",   // quay vào thế chiến đấu
-  attack: "M1_0",  // đòn thường (đòn đầu tiên của mỗi bên)
-  attack2: "M1_1", // đòn ngắn dùng cho các đòn tiếp theo (đánh bồi)
+  dodge: "M0_4",   // né tránh (dùng cho bên bị đánh trượt)
+  attack: "M1_0",  // đòn mở đầu: bắt đầu từ thế đứng nghiêng (nối từ idle/phi)
+  attack2: "M1_1", // đòn tiếp theo: bắt đầu từ thế đã quay mặt (nối từ đòn trước)
   crit: "M1_8"     // chí mạng
 };
 
@@ -33,6 +34,7 @@ export const BATTLE_SPRITES = {
     facing: "left",
     scale: 1.25,
     anchor: { x: 85, y: 120 },
+    rest: "f013",
     reach: 125,
     roles: MOUNTED_ROLES,
     impact: { M1_0: 6, M1_1: 1, M1_8: 3 }
@@ -42,6 +44,7 @@ export const BATTLE_SPRITES = {
     facing: "left",
     scale: 1.25,
     anchor: { x: 107, y: 118 },
+    rest: "f009",
     reach: 125,
     roles: MOUNTED_ROLES,
     impact: { M1_0: 6, M1_1: 3, M1_8: 4 }
