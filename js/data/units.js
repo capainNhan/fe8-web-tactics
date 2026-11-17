@@ -58,3 +58,16 @@ export const unitsData = [
     }
   }
 ];
+
+/**
+ * Tạo bản sao dữ liệu đơn vị cho một ván chơi mới.
+ * unitsData giữ nguyên là dữ liệu gốc, không bị ván chơi sửa.
+ */
+export function createUnits() {
+  return unitsData.map(unit => ({
+    ...unit,
+    weapon: { ...unit.weapon },
+    hasMoved: false,
+    hasActed: false
+  }));
+}

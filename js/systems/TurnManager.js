@@ -5,6 +5,10 @@ export class TurnManager {
     this.turn = 1;
   }
 
+  isPlayerPhase() {
+    return this.phase === "player";
+  }
+
   resetUnits(units) {
     for (const unit of units) {
       unit.hasMoved = false;
@@ -45,6 +49,11 @@ export class TurnManager {
 
   beginEnemyPhase() {
     this.phase = "enemy";
+  }
+
+  // Dùng khi chuyển lượt bị lỗi: đưa game về lượt người chơi.
+  restorePlayerPhase() {
+    this.phase = "player";
   }
 
   beginPlayerPhase(units) {

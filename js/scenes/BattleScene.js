@@ -1,745 +1,83 @@
 import { SpriteManager } from "../systems/sprites/SpriteManager.js";
-import { UnitActionMenu } from "../systems/ui/UnitActionMenu.js";
-import { TILE, GRID } from "../config.js";
-import { unitsData } from "../data/units.js";
 import {
   calculateBattlePreview,
   resolveStrike
 } from "../fe8Logic.js";
 import { getIdleFrame } from "../systems/spriteSheet.js";
+import {
+  CHAR5_FRAME_FILES,
+  getChar5TextureKey
+} from "../data/battleAssets.js";
+import { log as gameLog } from "../systems/GameLog.js";
 
-const CHAR5_PATH = "./assets/characters/Char4/";
-const CHAR5_FRAME_PATH = CHAR5_PATH + "frames/";
-
-const CHAR5_FRAME_FILES = [
-  "frame_001.png",
-  "frame_002.png",
-  "frame_003.png",
-  "frame_004.png",
-  "frame_005.png",
-  "frame_006.png",
-  "frame_007.png"
-];
-
+/**
+ * BATTLE SCENE
+ * Màn hình giao chiến (cutscene): chỉ lo hiển thị và animation trận đấu.
+ * Được MapScene mở bằng scene.launch("BattleScene", { attacker, defender, onComplete }).
+ * Khi xong, scene tự đóng và gọi onComplete để MapScene tiếp tục.
+ *
+ * Phần bàn cờ (chọn đơn vị, menu, di chuyển, lượt) nằm ở MapScene.
+ */
 export class BattleScene extends Phaser.Scene {
   constructor() {
     super("BattleScene");
 
-    this.selectedUnit = null;
-    this.moveTiles = [];
-    this.battleInProgress = false;
-    this.actionMode = null;
-
-    this.turnNumber = 1;
-    this.turnPhase = "player";
-    this.turnTransitioning = false;
-
     this.spriteManager = new SpriteManager(this, {
       frameFiles: CHAR5_FRAME_FILES,
-      getTextureKey: file =>
-        this.getChar5TextureKey(file)
+      getTextureKey: file => getChar5TextureKey(file)
     });
 
     this.animations = this.spriteManager.animations;
-    this.actionMenu = null;
   }
 
   // ==========================================
-  // PRELOAD
+  // LIFECYCLE
   // ==========================================
 
-  preload() {
-    this.load.image(
-      "char1",
-      "./assets/characters/Char1.jpg"
-    );
-
-    this.load.image(
-      "char2",
-      "./assets/characters/Char2.png"
-    );
-
-    this.load.json(
-      "char5Manifest",
-      CHAR5_PATH + "manifest.json"
-    );
-
-    CHAR5_FRAME_FILES.forEach(file => {
-      const key = this.getChar5TextureKey(file);
-
-      this.load.image(
-        key,
-        CHAR5_FRAME_PATH + file
-      );
-    });
+  init(data) {
+    this.battleData = data;
   }
-
-  getChar5TextureKey(file) {
-    return "char5_" + file.replace(".png", "");
-  }
-
-  // ==========================================
-  // CREATE
-  // ==========================================
 
   create() {
-    this.resetUnitTurnStates();
-
-    this.graphics = this.add.graphics();
-
-    this.drawGrid();
-    this.createUnits();
     this.createBattleScreen();
-    this.createTurnUI();
-
-    this.actionMenu = new UnitActionMenu(
-      this,
-      action => this.handleUnitAction(action)
-    );
-
-    this.prepareSprites();
-
-    this.input.on("pointerdown", p => {
-      if (
-        this.battleInProgress ||
-        this.turnTransitioning
-      ) {
-        return;
-      }
-
-      if (
-        this.endTurnButton &&
-        this.endTurnButton.getBounds().contains(p.x, p.y)
-      ) {
-        return;
-      }
-
-      if (
-        this.actionMenu &&
-        this.actionMenu.contains(p.x, p.y)
-      ) {
-        return;
-      }
-
-      if (this.turnPhase !== "player") {
-        return;
-      }
-
-      const gx = Math.floor(p.x / TILE);
-      const gy = Math.floor(p.y / TILE);
-
-      if (
-        gx >= 0 &&
-        gx < GRID &&
-        gy >= 0 &&
-        gy < GRID
-      ) {
-        this.handleTileClick(gx, gy);
-      }
-    });
-
-    this.updateTurnUI();
-    this.log("Lượt 1 - Phe người chơi.");
+    this.runBattle();
   }
 
-  // ==========================================
-  // TURN SYSTEM
-  // ==========================================
-
-  resetUnitTurnStates() {
-    unitsData.forEach(unit => {
-      unit.hasMoved = false;
-      unit.hasActed = false;
-    });
-  }
-
-  canUnitMove(unit) {
-    return (
-      this.turnPhase === "player" &&
-      unit.team === "player" &&
-      unit.hp > 0 &&
-      !unit.hasMoved &&
-      !unit.hasActed
-    );
-  }
-
-  canUnitAct(unit) {
-    return (
-      this.turnPhase === "player" &&
-      unit.team === "player" &&
-      unit.hp > 0 &&
-      !unit.hasActed
-    );
-  }
-
-  // ==========================================
-  // UNIT ACTION MENU
-  // ==========================================
-
-  showUnitActionMenu(unit) {
-    if (!this.actionMenu || !unit) return;
-
-    this.actionMenu.show(unit, [
-      {
-        id: "move",
-        label: "Di chuyển",
-        enabled: this.canUnitMove(unit)
-      },
-      {
-        id: "attack",
-        label: "Tấn công",
-        enabled: this.canUnitAct(unit)
-      },
-      {
-        id: "wait",
-        label: "Đợi",
-        enabled: this.canUnitAct(unit)
-      }
-    ]);
-
-    // UnitActionMenu ban đầu dùng TILE = 32.
-    // Điều chỉnh tọa độ theo kích thước ô thực tế.
-    const width = 112;
-    const height = 87;
-
-    const x = Math.min(
-      Math.max(4, unit.x * TILE + TILE),
-      384 - width - 4
-    );
-
-    const y = Math.min(
-      Math.max(4, unit.y * TILE),
-      384 - height - 4
-    );
-
-    this.actionMenu.container.setPosition(x, y);
-  }
-
-  hideUnitActionMenu() {
-    if (this.actionMenu) {
-      this.actionMenu.hide();
-    }
-  }
-
-  handleUnitAction(action) {
-    const unit = this.selectedUnit;
-
-    if (
-      !unit ||
-      !this.canUnitAct(unit) ||
-      this.battleInProgress ||
-      this.turnTransitioning
-    ) {
-      return;
-    }
-
-    switch (action) {
-      case "move":
-        if (!this.canUnitMove(unit)) {
-          this.log("Đơn vị này không thể di chuyển.");
-          return;
-        }
-
-        this.hideUnitActionMenu();
-        this.actionMode = "move";
-        this.moveTiles = this.getAvailableMoveTiles(unit);
-        this.drawGrid();
-
-        this.log("Chọn ô muốn di chuyển.");
-        break;
-
-      case "attack":
-        this.hideUnitActionMenu();
-        this.actionMode = "attack";
-        this.moveTiles = [];
-        this.drawGrid();
-
-        this.log("Chọn kẻ địch liền kề để tấn công.");
-        break;
-
-      case "wait":
-        unit.hasActed = true;
-
-        this.hideUnitActionMenu();
-
-        this.selectedUnit = null;
-        this.moveTiles = [];
-        this.actionMode = null;
-
-        this.drawGrid();
-        this.updateTurnUI();
-
-        this.log(unit.name + " đã đợi.");
-        break;
-    }
-  }
-
-  // ==========================================
-  // TURN UI
-  // ==========================================
-
-  createTurnUI() {
-    this.turnUI = this.add.container(0, 0)
-      .setDepth(2000);
-
-    this.turnLabel = this.add.text(
-      8,
-      8,
-      "",
-      {
-        fontSize: "12px",
-        color: "#ffffff",
-        backgroundColor: "#111827",
-        padding: {
-          x: 7,
-          y: 5
-        }
-      }
-    );
-
-    this.endTurnButton = this.add.text(
-      376,
-      8,
-      "KẾT THÚC LƯỢT",
-      {
-        fontSize: "11px",
-        color: "#ffffff",
-        backgroundColor: "#166534",
-        padding: {
-          x: 8,
-          y: 6
-        }
-      }
-    )
-      .setOrigin(1, 0)
-      .setInteractive({ useHandCursor: true });
-
-    this.endTurnButton.on("pointerdown", () => {
-      this.endPlayerTurn();
-    });
-
-    this.endTurnButton.on("pointerover", () => {
-      if (this.turnPhase === "player") {
-        this.endTurnButton.setBackgroundColor("#15803d");
-      }
-    });
-
-    this.endTurnButton.on("pointerout", () => {
-      this.endTurnButton.setBackgroundColor(
-        this.turnPhase === "player"
-          ? "#166534"
-          : "#4b5563"
-      );
-    });
-
-    this.turnUI.add([
-      this.turnLabel,
-      this.endTurnButton
-    ]);
-  }
-
-  updateTurnUI() {
-    if (!this.turnLabel || !this.endTurnButton) {
-      return;
-    }
-
-    const phaseText =
-      this.turnPhase === "player"
-        ? "LƯỢT NGƯỜI CHƠI"
-        : "LƯỢT ĐỊCH";
-
-    this.turnLabel.setText(
-      `LƯỢT ${this.turnNumber} - ${phaseText}`
-    );
-
-    const canEndTurn =
-      this.turnPhase === "player" &&
-      !this.battleInProgress &&
-      !this.turnTransitioning;
-
-    this.endTurnButton
-      .setAlpha(canEndTurn ? 1 : 0.55)
-      .setBackgroundColor(
-        canEndTurn
-          ? "#166534"
-          : "#4b5563"
-      );
-  }
-
-  async endPlayerTurn() {
-    if (
-      this.turnPhase !== "player" ||
-      this.battleInProgress ||
-      this.turnTransitioning
-    ) {
-      return;
-    }
-
-    this.turnTransitioning = true;
-
-    this.hideUnitActionMenu();
-    this.selectedUnit = null;
-    this.moveTiles = [];
-    this.actionMode = null;
-
-    this.drawGrid();
-    this.updateTurnUI();
+  async runBattle() {
+    const { attacker, defender, onComplete } = this.battleData;
 
     try {
-      this.turnPhase = "enemy";
-      this.updateTurnUI();
-
-      this.log("=== LƯỢT ĐỊCH BẮT ĐẦU ===");
-
-      // AI sẽ được tích hợp ở bước tiếp theo.
-      await this.wait(700);
-
-      this.log("Phe địch đã hoàn thành lượt.");
-
-      this.turnNumber += 1;
-      this.turnPhase = "player";
-
-      this.resetUnitTurnStates();
-
-      this.log(
-        `=== LƯỢT ${this.turnNumber} - NGƯỜI CHƠI ===`
-      );
+      await this.ensureSpritesReady();
+      await this.playBattle(attacker, defender);
 
     } catch (error) {
-      console.error("Turn transition error:", error);
+      console.error("Battle Runtime error:", error);
 
-      this.turnPhase = "player";
-
-      this.log(
-        "Lỗi chuyển lượt. Đã khôi phục lượt người chơi."
-      );
+      this.log("Lỗi trận đấu: " + error.message);
 
     } finally {
-      this.turnTransitioning = false;
+      this.tweens.resumeAll();
+      this.scene.stop();
 
-      this.hideUnitActionMenu();
-      this.selectedUnit = null;
-      this.moveTiles = [];
-      this.actionMode = null;
-
-      this.drawGrid();
-      this.updateTurnUI();
+      if (onComplete) onComplete({ attacker, defender });
     }
   }
 
-  // ==========================================
-  // SPRITE PREPARATION
-  // ==========================================
+  // Chuẩn bị sprite lần đầu; các trận sau dùng lại kết quả.
+  async ensureSpritesReady() {
+    if (this.spriteManager.ready) return;
 
-  async prepareSprites() {
-    try {
-      const result = await this.spriteManager.prepare(
-        this.attackerSprite,
-        this.defenderSprite
-      );
-
-      console.log(
-        "[SpriteManager] Đã chuẩn bị sprite:",
-        result
-      );
-
-      this.log("Đã tải Char4 và sprite Char2.");
-
-    } catch (error) {
-      this.spriteManager.ready = false;
-
-      console.error(
-        "Không thể chuẩn bị battle sprites:",
-        error
-      );
-
-      this.log(
-        "Lỗi tải sprite: " + error.message
-      );
-    }
-  }
-
-  // ==========================================
-  // MAP
-  // ==========================================
-
-  drawGrid() {
-    this.graphics.clear();
-
-    for (let y = 0; y < GRID; y++) {
-      for (let x = 0; x < GRID; x++) {
-        this.graphics.fillStyle(
-          (x + y) % 2 === 0
-            ? 0x22223b
-            : 0x2a2a4a
-        );
-
-        this.graphics.fillRect(
-          x * TILE,
-          y * TILE,
-          TILE,
-          TILE
-        );
-
-        this.graphics.lineStyle(1, 0x44445a);
-
-        this.graphics.strokeRect(
-          x * TILE,
-          y * TILE,
-          TILE,
-          TILE
-        );
-      }
-    }
-
-    this.moveTiles.forEach(t => {
-      this.graphics.fillStyle(0x2ecc71, 0.4);
-
-      this.graphics.fillRect(
-        t.x * TILE,
-        t.y * TILE,
-        TILE,
-        TILE
-      );
-    });
-  }
-
-  createUnits() {
-    unitsData.forEach(u => {
-      const c = this.add.container(
-        u.x * TILE + TILE / 2,
-        u.y * TILE + TILE / 2
-      );
-
-      const circle = this.add.circle(
-        0,
-        0,
-        18,
-        u.team === "player"
-          ? 0x3498db
-          : 0xe74c3c
-      );
-
-      const label = this.add.text(
-        -7,
-        -9,
-        u.team === "player" ? "P" : "E",
-        {
-          fontSize: "15px",
-          color: "#fff"
-        }
-      );
-
-      const hpBG = this.add.rectangle(
-        0,
-        20,
-        32,
-        5,
-        0x000000
-      );
-
-      const hpBar = this.add.rectangle(
-        -16,
-        20,
-        32,
-        5,
-        0x22c55e
-      ).setOrigin(0, 0.5);
-
-      c.add([
-        circle,
-        label,
-        hpBG,
-        hpBar
-      ]);
-
-      u.sprite = c;
-      u.hpBar = hpBar;
-    });
-  }
-
-  // ==========================================
-  // MOVEMENT RANGE
-  // ==========================================
-
-  getAvailableMoveTiles(unit) {
-    const tiles = [];
-
-    for (let y = 0; y < GRID; y++) {
-      for (let x = 0; x < GRID; x++) {
-        const distance =
-          Math.abs(unit.x - x) +
-          Math.abs(unit.y - y);
-
-        if (distance === 0 || distance > unit.mov) {
-          continue;
-        }
-
-        const occupied = unitsData.some(other =>
-          other !== unit &&
-          other.hp > 0 &&
-          other.x === x &&
-          other.y === y
-        );
-
-        if (!occupied) {
-          tiles.push({ x, y });
-        }
-      }
-    }
-
-    return tiles;
-  }
-
-  // ==========================================
-  // TILE INPUT
-  // ==========================================
-
-  handleTileClick(gx, gy) {
-    if (
-      this.turnPhase !== "player" ||
-      this.battleInProgress ||
-      this.turnTransitioning
-    ) {
-      return;
-    }
-
-    const target = unitsData.find(
-      u =>
-        u.x === gx &&
-        u.y === gy &&
-        u.hp > 0
+    const result = await this.spriteManager.prepare(
+      this.attackerSprite,
+      this.defenderSprite
     );
 
-    // Chọn đơn vị người chơi.
-    if (target && target.team === "player") {
-      if (!this.canUnitAct(target)) {
-        this.log(
-          target.name + " đã hoàn thành hành động lượt này."
-        );
-        return;
-      }
+    console.log("[SpriteManager] Đã chuẩn bị sprite:", result);
 
-      this.selectedUnit = target;
-      this.actionMode = null;
-      this.moveTiles = [];
-
-      this.drawGrid();
-      this.showUnitActionMenu(target);
-
-      if (target.hasMoved) {
-        this.log(
-          target.name +
-          " đã di chuyển. Có thể tiếp tục tấn công hoặc đợi."
-        );
-      } else {
-        this.log("Đã chọn " + target.name);
-      }
-
-      return;
-    }
-
-    if (!this.selectedUnit || !this.actionMode) {
-      return;
-    }
-
-    const attacker = this.selectedUnit;
-
-    if (!this.canUnitAct(attacker)) {
-      this.hideUnitActionMenu();
-      this.selectedUnit = null;
-      this.moveTiles = [];
-      this.actionMode = null;
-      this.drawGrid();
-      return;
-    }
-
-    // ========================================
-    // ATTACK MODE
-    // ========================================
-
-    if (this.actionMode === "attack") {
-      if (!target || target.team !== "enemy") {
-        this.log("Hãy chọn một kẻ địch.");
-        return;
-      }
-
-      const distance =
-        Math.abs(attacker.x - target.x) +
-        Math.abs(attacker.y - target.y);
-
-      if (distance !== 1) {
-        this.log("Kẻ địch nằm ngoài tầm tấn công.");
-        return;
-      }
-
-      attacker.hasActed = true;
-
-      this.hideUnitActionMenu();
-      this.selectedUnit = null;
-      this.moveTiles = [];
-      this.actionMode = null;
-
-      this.drawGrid();
-      this.updateTurnUI();
-
-      this.startBattle(attacker, target);
-      return;
-    }
-
-    // ========================================
-    // MOVE MODE
-    // ========================================
-
-    if (this.actionMode === "move") {
-      if (target) {
-        this.log("Ô này đang có đơn vị chiếm giữ.");
-        return;
-      }
-
-      const isValidMove = this.moveTiles.some(
-        tile => tile.x === gx && tile.y === gy
-      );
-
-      if (!isValidMove) {
-        this.log("Không thể di chuyển đến ô này.");
-        return;
-      }
-
-      attacker.hasMoved = true;
-      attacker.x = gx;
-      attacker.y = gy;
-
-      this.moveTiles = [];
-      this.actionMode = null;
-
-      this.drawGrid();
-
-      this.tweens.add({
-        targets: attacker.sprite,
-        x: gx * TILE + TILE / 2,
-        y: gy * TILE + TILE / 2,
-        duration: 200,
-        ease: "Power2",
-        onComplete: () => {
-          if (
-            this.selectedUnit === attacker &&
-            !attacker.hasActed
-          ) {
-            this.log(
-              attacker.name +
-              " đã di chuyển. Chọn hành động tiếp theo."
-            );
-
-            this.showUnitActionMenu(attacker);
-          }
-        }
-      });
-
-      return;
-    }
+    this.log("Đã tải Char4 và sprite Char2.");
   }
-    // ==========================================
+
+  // ==========================================
   // BATTLE SCREEN
   // ==========================================
 
@@ -1079,78 +417,93 @@ export class BattleScene extends Phaser.Scene {
   // BATTLE RUNTIME
   // ==========================================
 
-  async startBattle(atk, def) {
-    if (this.battleInProgress) return;
+  async playBattle(atk, def) {
+    this.battleUI.setVisible(true);
 
-    this.battleInProgress = true;
-    this.hideUnitActionMenu();
-    this.updateTurnUI();
+    this.attackerSprite
+      .setPosition(110, 316)
+      .setVisible(true)
+      .setAlpha(1)
+      .clearTint();
 
-    try {
-      if (!this.spriteManager.ready) {
-        throw new Error(
-          "Char5 chưa sẵn sàng. Kiểm tra manifest và thư mục frames."
-        );
-      }
+    this.defenderSprite
+      .setPosition(275, 316)
+      .setVisible(true)
+      .setAlpha(1)
+      .clearTint();
 
-      this.battleUI.setVisible(true);
+    this.setChar5Frame(
+      this.attackerSprite,
+      this.animations.player.attack[0]
+    );
 
-      atk.sprite.setVisible(false);
-      def.sprite.setVisible(false);
+    this.setFrame(
+      this.defenderSprite,
+      getIdleFrame(this.animations.enemy)
+    );
 
-      this.attackerSprite
-        .setPosition(110, 316)
-        .setVisible(true)
-        .setAlpha(1)
-        .clearTint();
+    this.attackerName.setText(atk.name);
+    this.defenderName.setText(def.name);
 
-      this.defenderSprite
-        .setPosition(275, 316)
-        .setVisible(true)
-        .setAlpha(1)
-        .clearTint();
+    this.battleMessage.setText("GIAO CHIẾN!");
 
-      this.setChar5Frame(
-        this.attackerSprite,
-        this.animations.player.attack[0]
-      );
+    this.updateBattleHP(atk, def);
 
-      this.setFrame(
-        this.defenderSprite,
-        getIdleFrame(this.animations.enemy)
-      );
+    this.log(
+      `=== ${atk.name} VS ${def.name} ===`
+    );
 
-      this.attackerName.setText(atk.name);
-      this.defenderName.setText(def.name);
+    await this.wait(350);
 
-      this.battleMessage.setText("GIAO CHIẾN!");
+    const pv = calculateBattlePreview(atk, def);
 
-      this.updateBattleHP(atk, def);
+    // 1. Bên chủ động tấn công trước.
+    await this.performStrike(
+      atk,
+      def,
+      pv.attacker,
+      this.attackerSprite,
+      this.defenderSprite,
+      this.animations.player
+    );
 
-      this.log(
-        `=== ${atk.name} VS ${def.name} ===`
-      );
-
-      await this.wait(350);
-
-      const pv = calculateBattlePreview(atk, def);
-
-      // 1. Bên chủ động tấn công trước.
+    // 2. Đối thủ phản công nếu cả hai còn sống.
+    if (
+      def.hp > 0 &&
+      atk.hp > 0 &&
+      def.weapon
+    ) {
       await this.performStrike(
-        atk,
         def,
-        pv.attacker,
-        this.attackerSprite,
+        atk,
+        pv.defender,
         this.defenderSprite,
-        this.animations.player
+        this.attackerSprite,
+        this.animations.enemy
       );
+    }
 
-      // 2. Đối thủ phản công nếu cả hai còn sống.
-      if (
-        def.hp > 0 &&
-        atk.hp > 0 &&
-        def.weapon
-      ) {
+    // 3. Đánh bồi.
+    if (atk.hp > 0 && def.hp > 0) {
+      if (pv.attacker.double) {
+        this.battleMessage.setText(
+          `${atk.name} ĐÁNH BỒI!`
+        );
+
+        await this.performStrike(
+          atk,
+          def,
+          pv.attacker,
+          this.attackerSprite,
+          this.defenderSprite,
+          this.animations.player
+        );
+
+      } else if (pv.defender.double) {
+        this.battleMessage.setText(
+          `${def.name} ĐÁNH BỒI!`
+        );
+
         await this.performStrike(
           def,
           atk,
@@ -1160,103 +513,17 @@ export class BattleScene extends Phaser.Scene {
           this.animations.enemy
         );
       }
-
-      // 3. Đánh bồi.
-      if (atk.hp > 0 && def.hp > 0) {
-        if (pv.attacker.double) {
-          this.battleMessage.setText(
-            `${atk.name} ĐÁNH BỒI!`
-          );
-
-          await this.performStrike(
-            atk,
-            def,
-            pv.attacker,
-            this.attackerSprite,
-            this.defenderSprite,
-            this.animations.player
-          );
-
-        } else if (pv.defender.double) {
-          this.battleMessage.setText(
-            `${def.name} ĐÁNH BỒI!`
-          );
-
-          await this.performStrike(
-            def,
-            atk,
-            pv.defender,
-            this.defenderSprite,
-            this.attackerSprite,
-            this.animations.enemy
-          );
-        }
-      }
-
-      this.battleMessage.setText(
-        def.hp <= 0
-          ? def.name + " GỤC NGÃ!"
-          : atk.hp <= 0
-            ? atk.name + " GỤC NGÃ!"
-            : "KẾT THÚC"
-      );
-
-      await this.wait(650);
-
-    } catch (error) {
-      console.error(
-        "Battle Runtime error:",
-        error
-      );
-
-      this.log(
-        "Lỗi trận đấu: " + error.message
-      );
-
-    } finally {
-      this.tweens.resumeAll();
-
-      if (this.battleUI) {
-        this.battleUI.setVisible(false);
-      }
-
-      this.attackerSprite
-        .setVisible(false)
-        .setAlpha(1)
-        .clearTint()
-        .setPosition(110, 316);
-
-      this.defenderSprite
-        .setVisible(false)
-        .setAlpha(1)
-        .clearTint()
-        .setPosition(275, 316);
-
-      if (atk.hp > 0) {
-        atk.sprite.setVisible(true);
-
-        atk.hpBar.width =
-          32 * (atk.hp / atk.maxHp);
-      } else {
-        atk.sprite.setVisible(false);
-      }
-
-      if (def.hp > 0) {
-        def.sprite.setVisible(true);
-
-        def.hpBar.width =
-          32 * (def.hp / def.maxHp);
-      } else {
-        def.sprite.setVisible(false);
-      }
-
-      this.battleInProgress = false;
-
-      this.drawGrid();
-      this.updateTurnUI();
-
-      this.log("=== KẾT THÚC GIAO TRANH ===");
     }
+
+    this.battleMessage.setText(
+      def.hp <= 0
+        ? def.name + " GỤC NGÃ!"
+        : atk.hp <= 0
+          ? atk.name + " GỤC NGÃ!"
+          : "KẾT THÚC"
+    );
+
+    await this.wait(650);
   }
 
   // ==========================================
@@ -1634,12 +901,6 @@ export class BattleScene extends Phaser.Scene {
   // ==========================================
 
   log(message) {
-    const box = document.getElementById("log-box");
-
-    if (box) {
-      box.innerHTML += "<br>> " + message;
-      box.scrollTop = box.scrollHeight;
-    }
+    gameLog(message);
   }
-      }
-  
+}

@@ -3,6 +3,8 @@ import {
   GAME_HEIGHT
 } from "./config.js";
 
+import { BootScene } from "./scenes/BootScene.js";
+import { MapScene } from "./scenes/MapScene.js";
 import { BattleScene } from "./scenes/BattleScene.js";
 
 const game = new Phaser.Game({
@@ -23,7 +25,7 @@ const game = new Phaser.Game({
     autoCenter: Phaser.Scale.CENTER_BOTH
   },
 
-  scene: [BattleScene]
+  scene: [BootScene, MapScene, BattleScene]
 });
 
 window.fe8Game = game;

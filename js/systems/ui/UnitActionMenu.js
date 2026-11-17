@@ -1,3 +1,9 @@
+import {
+  TILE,
+  GAME_WIDTH,
+  GAME_HEIGHT
+} from "../../config.js";
+
 export class UnitActionMenu {
   constructor(scene, onSelect) {
     this.scene = scene;
@@ -34,13 +40,13 @@ export class UnitActionMenu {
     const height = actions.length * rowHeight + 12;
 
     const x = Math.min(
-      Math.max(4, unit.x * 32 + 32),
-      384 - width - 4
+      Math.max(4, unit.x * TILE + TILE),
+      GAME_WIDTH - width - 4
     );
 
     const y = Math.min(
-      Math.max(4, unit.y * 32),
-      384 - height - 4
+      Math.max(4, unit.y * TILE),
+      GAME_HEIGHT - height - 4
     );
 
     this.container.setPosition(x, y);
