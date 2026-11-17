@@ -4,6 +4,7 @@ export const unitsData = [
     id: "p1",
     name: "Kiếm Sĩ",
     team: "player",
+    battleSprite: "Char4",
     x: 1,
     y: 3,
 
@@ -33,6 +34,7 @@ export const unitsData = [
     id: "e1",
     name: "Lính Đánh Thuê",
     team: "enemy",
+    battleSprite: "Char2",
     x: 5,
     y: 3,
 

@@ -1,13 +1,10 @@
-import { SpriteManager } from "../systems/sprites/SpriteManager.js";
 import {
   calculateBattlePreview,
   resolveStrike
 } from "../fe8Logic.js";
-import { getIdleFrame } from "../systems/spriteSheet.js";
-import {
-  CHAR5_FRAME_FILES,
-  getChar5TextureKey
-} from "../data/battleAssets.js";
+import { SpriteManager } from "../systems/sprites/SpriteManager.js";
+import { frameKey } from "../systems/sprites/SpriteLoader.js";
+import { getBattleSpriteId } from "../data/battleSprites.js";
 import { log as gameLog } from "../systems/GameLog.js";
 
 /**
@@ -16,18 +13,12 @@ import { log as gameLog } from "../systems/GameLog.js";
  * Được MapScene mở bằng scene.launch("BattleScene", { attacker, defender, onComplete }).
  * Khi xong, scene tự đóng và gọi onComplete để MapScene tiếp tục.
  *
- * Phần bàn cờ (chọn đơn vị, menu, di chuyển, lượt) nằm ở MapScene.
+ * Sprite của mỗi bên lấy từ manifest theo unit.battleSprite
+ * (xem systems/sprites/BattleSpriteSet.js).
  */
 export class BattleScene extends Phaser.Scene {
   constructor() {
     super("BattleScene");
-
-    this.spriteManager = new SpriteManager(this, {
-      frameFiles: CHAR5_FRAME_FILES,
-      getTextureKey: file => getChar5TextureKey(file)
-    });
-
-    this.animations = this.spriteManager.animations;
   }
 
   // ==========================================
@@ -39,7 +30,8 @@ export class BattleScene extends Phaser.Scene {
   }
 
   create() {
-    this.createBattleScreen();
+    this.sprites = new SpriteManager(this);
+
     this.runBattle();
   }
 
@@ -47,7 +39,12 @@ export class BattleScene extends Phaser.Scene {
     const { attacker, defender, onComplete } = this.battleData;
 
     try {
-      await this.ensureSpritesReady();
+      // Bên trái = bên chủ động tấn công, bên phải = bên phòng thủ.
+      this.atkSet = this.sprites.get(getBattleSpriteId(attacker));
+      this.defSet = this.sprites.get(getBattleSpriteId(defender));
+
+      this.createBattleScreen();
+
       await this.playBattle(attacker, defender);
 
     } catch (error) {
@@ -61,20 +58,6 @@ export class BattleScene extends Phaser.Scene {
 
       if (onComplete) onComplete({ attacker, defender });
     }
-  }
-
-  // Chuẩn bị sprite lần đầu; các trận sau dùng lại kết quả.
-  async ensureSpritesReady() {
-    if (this.spriteManager.ready) return;
-
-    const result = await this.spriteManager.prepare(
-      this.attackerSprite,
-      this.defenderSprite
-    );
-
-    console.log("[SpriteManager] Đã chuẩn bị sprite:", result);
-
-    this.log("Đã tải Char4 và sprite Char2.");
   }
 
   // ==========================================
@@ -104,20 +87,24 @@ export class BattleScene extends Phaser.Scene {
       )
     ]);
 
-    // Sprite trái: sẽ được thay bằng Char5 sau khi tải manifest.
-    this.attackerSprite = this.add.image(
-      110, 316, "char1"
-    )
-      .setOrigin(0.5, 1)
-      .setScale(1.7)
-      .setFlipX(true);
+    // Sprite trái (bên tấn công) nhìn sang phải, sprite phải nhìn sang trái.
+    // Điểm chân của từng frame được đặt tại (x, 316) bằng origin.
+    const { atkSet, defSet } = this;
 
-    // Sprite phải: giữ nguyên Char2.
-    this.defenderSprite = this.add.image(
-      275, 316, "char2"
+    this.attackerSprite = this.add.image(
+      110, 316, frameKey(atkSet.id, atkSet.idleFile)
     )
-      .setOrigin(0.5, 1)
-      .setScale(1.7);
+      .setScale(atkSet.scale)
+      .setFlipX(atkSet.flipFor("left"));
+
+    this.defenderSprite = this.add.image(
+      275, 316, frameKey(defSet.id, defSet.idleFile)
+    )
+      .setScale(defSet.scale)
+      .setFlipX(defSet.flipFor("right"));
+
+    atkSet.applyFrame(this.attackerSprite, atkSet.idleFile);
+    defSet.applyFrame(this.defenderSprite, defSet.idleFile);
 
     this.attackerName = this.add.text(
       18,
@@ -202,45 +189,15 @@ export class BattleScene extends Phaser.Scene {
   }
 
   // ==========================================
-  // SPRITE FRAME
-  // ==========================================
-
-  setChar5Frame(sprite, file) {
-    return this.spriteManager.setCharacterFrame(
-      sprite,
-      file
-    );
-  }
-
-  setFrame(sprite, frame) {
-    return this.spriteManager.setFrame(
-      sprite,
-      frame,
-      this.attackerSprite
-    );
-  }
-
-  // ==========================================
   // ANIMATION
   // ==========================================
 
-  async playFrames(sprite, list, delay = 65) {
-    if (!list?.length) return;
+  // Phát một animation (danh sách frame) trên sprite.
+  async playFrames(sprite, set, animation) {
+    for (const file of animation.frames) {
+      set.applyFrame(sprite, file);
 
-    for (const frame of list) {
-      this.setFrame(sprite, frame);
-      await this.wait(delay);
-    }
-  }
-
-  async playChar5Frames(sprite, files, delay = 50) {
-    if (!Array.isArray(files) || files.length === 0) {
-      return;
-    }
-
-    for (const file of files) {
-      this.setChar5Frame(sprite, file);
-      await this.wait(delay);
+      await this.wait(animation.frameDurationMs);
     }
   }
 
@@ -418,6 +375,8 @@ export class BattleScene extends Phaser.Scene {
   // ==========================================
 
   async playBattle(atk, def) {
+    const { atkSet, defSet } = this;
+
     this.battleUI.setVisible(true);
 
     this.attackerSprite
@@ -432,15 +391,8 @@ export class BattleScene extends Phaser.Scene {
       .setAlpha(1)
       .clearTint();
 
-    this.setChar5Frame(
-      this.attackerSprite,
-      this.animations.player.attack[0]
-    );
-
-    this.setFrame(
-      this.defenderSprite,
-      getIdleFrame(this.animations.enemy)
-    );
+    atkSet.applyFrame(this.attackerSprite, atkSet.idleFile);
+    defSet.applyFrame(this.defenderSprite, defSet.idleFile);
 
     this.attackerName.setText(atk.name);
     this.defenderName.setText(def.name);
@@ -464,7 +416,7 @@ export class BattleScene extends Phaser.Scene {
       pv.attacker,
       this.attackerSprite,
       this.defenderSprite,
-      this.animations.player
+      atkSet
     );
 
     // 2. Đối thủ phản công nếu cả hai còn sống.
@@ -479,7 +431,7 @@ export class BattleScene extends Phaser.Scene {
         pv.defender,
         this.defenderSprite,
         this.attackerSprite,
-        this.animations.enemy
+        defSet
       );
     }
 
@@ -496,7 +448,7 @@ export class BattleScene extends Phaser.Scene {
           pv.attacker,
           this.attackerSprite,
           this.defenderSprite,
-          this.animations.player
+          atkSet
         );
 
       } else if (pv.defender.double) {
@@ -510,7 +462,7 @@ export class BattleScene extends Phaser.Scene {
           pv.defender,
           this.defenderSprite,
           this.attackerSprite,
-          this.animations.enemy
+          defSet
         );
       }
     }
@@ -536,7 +488,7 @@ export class BattleScene extends Phaser.Scene {
     stats,
     atkSp,
     defSp,
-    anim
+    set
   ) {
     const startX = atkSp.x;
     const defenderStartX = defSp.x;
@@ -553,34 +505,18 @@ export class BattleScene extends Phaser.Scene {
     );
 
     try {
-      if (anim?.type === "manifest") {
-        await this.performChar5Strike(
-          atk,
-          def,
-          result,
-          atkSp,
-          defSp,
-          anim,
-          startX,
-          defenderStartX,
-          targetX,
-          isLeft
-        );
-
-      } else {
-        await this.performLegacyStrike(
-          atk,
-          def,
-          result,
-          atkSp,
-          defSp,
-          anim,
-          startX,
-          defenderStartX,
-          targetX,
-          isLeft
-        );
-      }
+      await this.performAnimatedStrike(
+        atk,
+        def,
+        result,
+        atkSp,
+        defSp,
+        set,
+        startX,
+        defenderStartX,
+        targetX,
+        isLeft
+      );
 
     } catch (error) {
       console.error("Strike animation error:", error);
@@ -592,27 +528,22 @@ export class BattleScene extends Phaser.Scene {
     } finally {
       this.tweens.resumeAll();
 
-      await this.runTween({
-        targets: atkSp,
-        x: startX,
-        duration: 170,
-        ease: "Power2"
-      }, 900);
+      // Lưới an toàn: nếu animation lỗi giữa chừng, đưa sprite về chỗ cũ.
+      if (Math.abs(atkSp.x - startX) > 0.5) {
+        await this.runTween({
+          targets: atkSp,
+          x: startX,
+          duration: 170,
+          ease: "Power2"
+        }, 900);
+      }
 
       atkSp
         .setAlpha(1)
         .clearTint();
 
       if (atk.hp > 0) {
-        if (anim?.type === "manifest") {
-          this.setChar5Frame(
-            atkSp,
-            anim.attack[0]
-          );
-        } else {
-          const idle = getIdleFrame(anim);
-          if (idle) this.setFrame(atkSp, idle);
-        }
+        set.applyFrame(atkSp, set.idleFile);
       }
 
       if (def.hp > 0) {
@@ -625,39 +556,48 @@ export class BattleScene extends Phaser.Scene {
 
       await this.wait(80);
     }
-            }
-    // ==========================================
-  // CHAR5 STRIKE
+  }
+
+  // ==========================================
+  // ANIMATED STRIKE
   // ==========================================
 
-  async performChar5Strike(
+  async performAnimatedStrike(
     atk,
     def,
     result,
     atkSp,
     defSp,
-    anim,
+    set,
     startX,
     defenderStartX,
     targetX,
     isLeft
   ) {
-    const delay = anim.frameDurationMs || 50;
+    const windup = set.animation("windup");
+    const retreat = set.animation("return");
 
-    const attackFrames = anim.attack || [];
-    const returnFrames = anim.return || [];
+    // Đòn chí mạng dùng animation "crit" nếu manifest có.
+    const attack =
+      (result.hit && result.crit && set.animation("crit")) ||
+      set.animation("attack");
 
-    if (!attackFrames.length) {
-      throw new Error("Char5 không có attack frames.");
+    if (!attack) {
+      throw new Error(
+        set.id + ' không có animation "attack".'
+      );
     }
 
-    // Chọn frame đầu tiên làm trạng thái chuẩn bị.
-    this.setChar5Frame(
-      atkSp,
-      attackFrames[0]
-    );
+    const delay = attack.frameDurationMs;
 
-    await this.wait(delay);
+    // Thế chuẩn bị.
+    set.applyFrame(atkSp, set.idleFile);
+
+    if (windup) {
+      await this.playFrames(atkSp, set, windup);
+    } else {
+      await this.wait(delay);
+    }
 
     // Di chuyển và animation tấn công chạy song song.
     const movement = this.runTween({
@@ -667,20 +607,15 @@ export class BattleScene extends Phaser.Scene {
       ease: "Power2"
     }, 1000);
 
-    const attackAnimation = this.playChar5Frames(
+    const attackAnimation = this.playFrames(
       atkSp,
-      attackFrames,
-      delay
+      set,
+      attack
     );
 
-    // Chạm mục tiêu ở gần frame cuối của pha lao tới.
-    const impactIndex = Math.min(
-      8,
-      Math.max(0, attackFrames.length - 1)
-    );
-
+    // Chờ tới frame va chạm (impactFrame trong manifest).
     await this.wait(
-      impactIndex * delay + 20
+      attack.impactFrame * delay + 20
     );
 
     // HP chỉ được thay đổi một lần tại điểm va chạm.
@@ -741,28 +676,23 @@ export class BattleScene extends Phaser.Scene {
       attackAnimation
     ]);
 
-    // Lui về bằng chuỗi frame return trong manifest.
-    if (returnFrames.length) {
+    // Lui về bằng animation "return" nếu có, không thì chỉ trượt về.
+    if (retreat) {
       const retreatMovement = this.runTween({
         targets: atkSp,
         x: startX,
         duration: Math.max(
           180,
-          returnFrames.length * delay
+          retreat.frames.length * retreat.frameDurationMs
         ),
         ease: "Power2"
       }, 1500);
 
-      const retreatAnimation = this.playChar5Frames(
-        atkSp,
-        returnFrames,
-        delay
-      );
-
       await Promise.all([
         retreatMovement,
-        retreatAnimation
+        this.playFrames(atkSp, set, retreat)
       ]);
+
     } else {
       await this.runTween({
         targets: atkSp,
@@ -772,128 +702,7 @@ export class BattleScene extends Phaser.Scene {
       }, 900);
     }
 
-    this.setChar5Frame(
-      atkSp,
-      attackFrames[0]
-    );
-  }
-
-  // ==========================================
-  // LEGACY ENEMY STRIKE
-  // ==========================================
-
-  async performLegacyStrike(
-    atk,
-    def,
-    result,
-    atkSp,
-    defSp,
-    anim,
-    startX,
-    defenderStartX,
-    targetX,
-    isLeft
-  ) {
-    const rows = anim || [];
-
-    const r0 = rows[0]?.frames || [];
-    const r1 = rows[1]?.frames || [];
-    const r2 = rows[2]?.frames || [];
-    const r3 = rows[3]?.frames || [];
-
-    const attackFrames = (
-      result.crit && r2.length
-        ? r2.slice(0, 10)
-        : r1.slice(0, 6)
-    );
-
-    await this.playFrames(
-      atkSp,
-      r0.slice(1, 5),
-      45
-    );
-
-    const movement = this.runTween({
-      targets: atkSp,
-      x: targetX,
-      duration: 220,
-      ease: "Power2"
-    });
-
-    const attackAnimation = this.playFrames(
-      atkSp,
-      attackFrames,
-      55
-    );
-
-    const impactFrame = Math.min(
-      2,
-      Math.max(0, attackFrames.length - 1)
-    );
-
-    await this.wait(
-      impactFrame * 55 + 30
-    );
-
-    if (result.hit) {
-      def.hp = Math.max(
-        0,
-        def.hp - result.damage
-      );
-
-      this.battleMessage.setText(
-        result.crit
-          ? `${atk.name} CHÍ MẠNG!`
-          : `${atk.name} TRÚNG ĐÒN!`
-      );
-
-      await this.hitStop(
-        result.crit ? 65 : 45
-      );
-
-      this.cameras.main.shake(
-        result.crit ? 180 : 90,
-        result.crit ? 0.025 : 0.012
-      );
-
-      this.updateBattleHP(atk, def);
-
-      this.log(
-        `${atk.name} đánh trúng ${def.name}, mất ${result.damage} HP.`
-      );
-
-      await this.hitEffect(
-        defSp,
-        defenderStartX,
-        isLeft,
-        !!result.crit,
-        def.hp <= 0
-      );
-
-      if (def.hp <= 0) {
-        this.log(
-          def.name + " đã bị hạ gục!"
-        );
-      }
-
-    } else {
-      this.battleMessage.setText(
-        atk.name + " ĐÁNH TRƯỢT!"
-      );
-
-      this.log(
-        atk.name + " đánh trượt!"
-      );
-    }
-
-    await Promise.all([
-      attackAnimation,
-      movement
-    ]);
-
-    if (r0[0]) {
-      this.setFrame(atkSp, r0[0]);
-    }
+    set.applyFrame(atkSp, set.idleFile);
   }
 
   // ==========================================

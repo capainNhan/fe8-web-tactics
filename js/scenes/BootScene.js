@@ -1,9 +1,17 @@
 
-import { loadBattleAssets } from "../data/battleAssets.js";
+import {
+  BATTLE_SPRITE_IDS
+} from "../data/battleSprites.js";
+import {
+  queueManifests,
+  queueFrames
+} from "../systems/sprites/SpriteLoader.js";
+import { log } from "../systems/GameLog.js";
 
 /**
  * BOOT SCENE
- * Tải toàn bộ asset một lần, rồi chuyển sang MapScene.
+ * Tải asset rồi chuyển sang MapScene.
+ * Hai pha: manifest trước, sau đó chỉ tải những frame manifest dùng.
  */
 export class BootScene extends Phaser.Scene {
   constructor() {
@@ -16,10 +24,40 @@ export class BootScene extends Phaser.Scene {
       file => console.error("Lỗi tải asset:", file.key, file.src)
     );
 
-    loadBattleAssets(this);
+    queueManifests(this, BATTLE_SPRITE_IDS);
   }
 
   create() {
-    this.scene.start("MapScene");
+    try {
+      queueFrames(this, BATTLE_SPRITE_IDS);
+
+    } catch (error) {
+      this.showError(error);
+      return;
+    }
+
+    this.load.once(
+      Phaser.Loader.Events.COMPLETE,
+      () => this.scene.start("MapScene")
+    );
+
+    this.load.start();
+  }
+
+  showError(error) {
+    console.error("Boot error:", error);
+
+    log("Lỗi tải sprite: " + error.message);
+
+    this.add.text(
+      12,
+      12,
+      "Lỗi tải sprite:\n" + error.message,
+      {
+        fontSize: "12px",
+        color: "#fca5a5",
+        wordWrap: { width: 360 }
+      }
+    );
   }
 }

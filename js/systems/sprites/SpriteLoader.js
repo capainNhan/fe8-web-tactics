@@ -1,107 +1,91 @@
-export class SpriteLoader {
-  constructor(scene, frameFiles, getTextureKey) {
-    this.scene = scene;
-    this.frameFiles = frameFiles;
-    this.getTextureKey = getTextureKey;
+
+import { BATTLE_SPRITE_ROOT } from "../../data/battleSprites.js";
+
+/**
+ * SPRITE LOADER
+ * Tải manifest và frame của sprite trận đánh.
+ * Manifest là nguồn dữ liệu duy nhất: chỉ những frame được animation
+ * dùng mới được tải.
+ */
+
+export const manifestKey = id => `${id}:manifest`;
+
+export const frameKey = (id, file) => `${id}:${file}`;
+
+export const manifestPath = id =>
+  `${BATTLE_SPRITE_ROOT}${id}/manifest.json`;
+
+export const framePath = (id, file) =>
+  `${BATTLE_SPRITE_ROOT}${id}/frames/${file}`;
+
+// Mọi file frame được các animation dùng tới.
+export function getUsedFiles(manifest) {
+  const files = new Set();
+
+  Object.values(manifest?.animations ?? {}).forEach(animation => {
+    (animation?.frames ?? []).forEach(file => files.add(file));
+  });
+
+  return [...files];
+}
+
+// Ném lỗi có tên sprite và nội dung dễ hiểu nếu manifest sai.
+export function validateManifest(manifest, id) {
+  const fail = message => {
+    throw new Error(`Manifest ${id}: ${message}`);
+  };
+
+  if (!manifest) fail("không tải được.");
+
+  if (!Array.isArray(manifest.frames)) {
+    fail("thiếu danh sách frames.");
   }
 
-  validateManifest(manifest) {
-    const scene = this.scene;
+  if (!manifest.animations?.attack?.frames?.length) {
+    fail('thiếu animation "attack".');
+  }
 
-    if (
-      !manifest ||
-      manifest.format !== "FE8_SPRITE_ANIMATION_V1"
-    ) {
-      throw new Error("Manifest Char5 không đúng định dạng.");
+  const known = new Map(
+    manifest.frames.map(frame => [frame.file, frame])
+  );
+
+  const used = getUsedFiles(manifest);
+
+  for (const file of used) {
+    if (!known.has(file)) {
+      fail(`frame "${file}" có trong animation nhưng không có trong frames.`);
     }
+  }
 
-    if (
-      !Array.isArray(manifest.frames) ||
-      !manifest.animations ||
-      !Array.isArray(manifest.animations.attack?.frames) ||
-      !Array.isArray(manifest.animations.return?.frames)
-    ) {
-      throw new Error("Manifest Char5 thiếu dữ liệu animation.");
+  for (const file of used) {
+    const frame = known.get(file);
+
+    if (!(frame.width > 0) || !(frame.height > 0)) {
+      fail(`frame "${file}" thiếu width/height.`);
     }
+  }
 
-    const available = new Set(
-      manifest.frames.map(frame => frame.file)
+  return manifest;
+}
+
+export function queueManifests(scene, ids) {
+  ids.forEach(id => {
+    scene.load.json(manifestKey(id), manifestPath(id));
+  });
+}
+
+export function queueFrames(scene, ids) {
+  ids.forEach(id => {
+    const manifest = validateManifest(
+      scene.cache.json.get(manifestKey(id)),
+      id
     );
 
-    const usedFrames = [
-      ...manifest.animations.attack.frames,
-      ...manifest.animations.return.frames
-    ];
-
-    for (const file of usedFrames) {
-      if (!available.has(file)) {
-        throw new Error(
-          "Frame không có trong manifest: " + file
-        );
-      }
-
-      if (!this.frameFiles.includes(file)) {
-        throw new Error(
-          "Frame chưa được khai báo tải: " + file
-        );
-      }
-
-      if (!scene.textures.exists(this.getTextureKey(file))) {
-        throw new Error(
-          "Thiếu file ảnh đang được sử dụng: " + file
-        );
-      }
-    }
-  }
-
-  loadTextureReady(key) {
-    const scene = this.scene;
-
-    if (
-      scene.textures.exists(key) ||
-      scene.cache.json.exists(key)
-    ) {
-      return Promise.resolve();
-    }
-
-    return new Promise((resolve, reject) => {
-      const onComplete = file => {
-        if (file.key === key) {
-          cleanup();
-          resolve();
-        }
-      };
-
-      const onError = file => {
-        if (file.key === key) {
-          cleanup();
-          reject(new Error("Lỗi tải: " + key));
-        }
-      };
-
-      const cleanup = () => {
-        scene.load.off(
-          Phaser.Loader.Events.FILE_COMPLETE,
-          onComplete
-        );
-
-        scene.load.off(
-          Phaser.Loader.Events.LOAD_ERROR,
-          onError
-        );
-      };
-
-      scene.load.on(
-        Phaser.Loader.Events.FILE_COMPLETE,
-        onComplete
+    getUsedFiles(manifest).forEach(file => {
+      scene.load.image(
+        frameKey(id, file),
+        framePath(id, file)
       );
-
-      scene.load.on(
-        Phaser.Loader.Events.LOAD_ERROR,
-        onError
-      );
-
-      scene.load.start();
     });
-  }
+  });
 }
