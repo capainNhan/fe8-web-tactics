@@ -1,0 +1,166 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Char Lab - kiểm tra Char mới</title>
+  <style>
+    body { margin: 0; padding: 16px; background: #1a1a2e; color: #eee; font: 14px/1.5 monospace; }
+    h1 { font-size: 18px; margin: 0 0 4px; }
+    .box { background: #0f0f1a; border: 1px solid #444; padding: 12px; margin: 12px 0; max-width: 1100px; }
+    label { display: inline-block; min-width: 150px; }
+    input[type=text] { background: #111; color: #eee; border: 1px solid #555; padding: 4px 6px; }
+    button { background: #166534; color: #fff; border: 0; padding: 7px 12px; cursor: pointer; margin-right: 6px; }
+    button:disabled { background: #4b5563; cursor: default; }
+    textarea { width: 100%; height: 190px; background: #111; color: #9ef; border: 1px solid #555; }
+    .strip { display: flex; gap: 6px; flex-wrap: wrap; margin: 6px 0 14px; }
+    .cell { text-align: center; font-size: 11px; color: #facc15; }
+    .cell.hit { outline: 2px solid #38bdf8; }
+    canvas.f { background: #22304a; image-rendering: pixelated; display: block; }
+    .warn { color: #fca5a5; }
+    .ok { color: #86efac; }
+  </style>
+</head>
+<body>
+  <h1>Char Lab</h1>
+  <div>Kiểm tra Char mới (spritesheet.png + spritesheet.json) trước khi thêm vào game. Hướng dẫn đầy đủ: ADD_CHARACTER.md</div>
+
+  <div class="box">
+    <p><label>Tên thư mục (vd Char8)</label><input type="text" id="id" value="Char8"></p>
+    <p><label>spritesheet.png</label><input type="file" id="png" accept="image/png"></p>
+    <p><label>spritesheet.json</label><input type="file" id="json" accept=".json,application/json"></p>
+    <button id="run">Phân tích</button>
+    <button id="download" disabled>Tải spritesheet.png đã làm sạch</button>
+  </div>
+
+  <div class="box" id="report">Chọn 2 file rồi bấm Phân tích.</div>
+  <div class="box"><b>Khối dán vào BATTLE_SPRITES (js/data/battleSprites.js)</b><textarea id="snippet" readonly></textarea></div>
+  <div id="strips"></div>
+
+<script type="module">
+import {
+  cleanStrayMarkers,
+  buildConfigSnippet,
+  guessImpactStep
+} from "./js/tools/sheetAnalysis.js";
+
+const $ = id => document.getElementById(id);
+let cleanedCanvas = null;
+
+const readFile = (file, as) => new Promise((resolve, reject) => {
+  const r = new FileReader();
+  r.onload = () => resolve(r.result);
+  r.onerror = reject;
+  as === "text" ? r.readAsText(file) : r.readAsDataURL(file);
+});
+
+const loadImage = src => new Promise((resolve, reject) => {
+  const img = new Image();
+  img.onload = () => resolve(img);
+  img.onerror = reject;
+  img.src = src;
+});
+
+$("run").onclick = async () => {
+  const report = [];
+  const add = (cls, text) => report.push(`<div class="${cls}">${text}</div>`);
+
+  try {
+    const pngFile = $("png").files[0];
+    const jsonFile = $("json").files[0];
+
+    if (!pngFile || !jsonFile) throw new Error("Thiếu file png hoặc json.");
+
+    const sheet = JSON.parse(await readFile(jsonFile, "text"));
+    const image = await loadImage(await readFile(pngFile, "url"));
+
+    const canvas = document.createElement("canvas");
+    canvas.width = image.width;
+    canvas.height = image.height;
+
+    const ctx = canvas.getContext("2d");
+    ctx.drawImage(image, 0, 0);
+
+    const data = ctx.getImageData(0, 0, canvas.width, canvas.height);
+    const removed = cleanStrayMarkers(data, sheet);
+
+    ctx.putImageData(data, 0, 0);
+    cleanedCanvas = canvas;
+
+    const fw = sheet.frameSize.w, fh = sheet.frameSize.h;
+    const cols = canvas.width / fw;
+
+    add("ok", `Ảnh ${canvas.width}×${canvas.height}, ô ${fw}×${fh}, ${Object.keys(sheet.frames).length} frame, ${Object.keys(sheet.animations).length} animation.`);
+
+    if (!Number.isInteger(cols) || canvas.height % fh) {
+      add("warn", "Kích thước ảnh KHÔNG chia hết cho frameSize: game sẽ cắt sai frame.");
+    }
+
+    add("ok", `Đã xoá ${removed} cụm pixel lạc (dấu mốc của công cụ). Hãy tải ảnh đã làm sạch và dùng nó làm spritesheet.png.`);
+
+    const need = ["M0_0", "M0_1", "M0_4", "M1_0", "M1_1", "M1_8"];
+    const missing = need.filter(code => !sheet.animations[code]);
+
+    if (missing.length) {
+      add("warn", `Thiếu animation: ${missing.join(", ")}. Sửa mục roles trong battleSprites.js cho khớp, hoặc game sẽ báo lỗi khi tải.`);
+    } else {
+      add("ok", "Đủ các animation M0_0, M0_1, M0_4, M1_0, M1_1, M1_8.");
+    }
+
+    $("snippet").value = buildConfigSnippet($("id").value.trim() || "CharX", data, sheet);
+
+    // Xem trước từng animation, đánh dấu bước va chạm gợi ý.
+    const strips = $("strips");
+    strips.innerHTML = "";
+
+    for (const [code, steps] of Object.entries(sheet.animations)) {
+      const total = steps.reduce((s, x) => s + x.ms, 0);
+      const impact = code.startsWith("M1_") ? guessImpactStep(data, sheet, code) : -1;
+
+      const title = document.createElement("div");
+      title.textContent = `${code}  (${steps.length} bước, ${total}ms)` + (impact >= 0 ? `  — va chạm gợi ý: bước ${impact}` : "");
+      strips.append(title);
+
+      const row = document.createElement("div");
+      row.className = "strip";
+
+      steps.forEach((step, i) => {
+        const f = sheet.frames[step.frame];
+        const cell = document.createElement("div");
+        cell.className = "cell" + (i === impact ? " hit" : "");
+
+        const c = document.createElement("canvas");
+        c.className = "f";
+        c.width = f.w;
+        c.height = f.h;
+        c.getContext("2d").drawImage(canvas, f.x, f.y, f.w, f.h, 0, 0, f.w, f.h);
+
+        cell.append(c, `${i}: ${step.frame} ${step.ms}ms`);
+        row.append(cell);
+      });
+
+      strips.append(row);
+    }
+
+    $("download").disabled = false;
+
+  } catch (error) {
+    add("warn", "Lỗi: " + error.message);
+  }
+
+  $("report").innerHTML = report.join("");
+};
+
+$("download").onclick = () => {
+  if (!cleanedCanvas) return;
+
+  cleanedCanvas.toBlob(blob => {
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = "spritesheet.png";
+    a.click();
+  });
+};
+</script>
+</body>
+</html>
