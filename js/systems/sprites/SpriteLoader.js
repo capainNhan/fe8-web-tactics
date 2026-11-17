@@ -1,91 +1,74 @@
 
-import { BATTLE_SPRITE_ROOT } from "../../data/battleSprites.js";
+import { BATTLE_SPRITE_ROOT, BATTLE_SPRITES } from "../../data/battleSprites.js";
 
 /**
  * SPRITE LOADER
- * Tải manifest và frame của sprite trận đánh.
- * Manifest là nguồn dữ liệu duy nhất: chỉ những frame được animation
- * dùng mới được tải.
+ * Tải spritesheet.json (pha 1) rồi spritesheet.png theo lưới frame (pha 2).
  */
 
-export const manifestKey = id => `${id}:manifest`;
+export const sheetKey = id => `${id}:sheet`;
 
-export const frameKey = (id, file) => `${id}:${file}`;
+export const imageKey = id => `${id}:image`;
 
-export const manifestPath = id =>
-  `${BATTLE_SPRITE_ROOT}${id}/manifest.json`;
+export const jsonPath = id =>
+  `${BATTLE_SPRITE_ROOT}${id}/spritesheet.json`;
 
-export const framePath = (id, file) =>
-  `${BATTLE_SPRITE_ROOT}${id}/frames/${file}`;
+export const imagePath = id =>
+  `${BATTLE_SPRITE_ROOT}${id}/spritesheet.png`;
 
-// Mọi file frame được các animation dùng tới.
-export function getUsedFiles(manifest) {
-  const files = new Set();
-
-  Object.values(manifest?.animations ?? {}).forEach(animation => {
-    (animation?.frames ?? []).forEach(file => files.add(file));
-  });
-
-  return [...files];
-}
-
-// Ném lỗi có tên sprite và nội dung dễ hiểu nếu manifest sai.
-export function validateManifest(manifest, id) {
+// Ném lỗi có tên sprite và nội dung dễ hiểu nếu dữ liệu sai.
+export function validateSheet(sheet, id) {
   const fail = message => {
-    throw new Error(`Manifest ${id}: ${message}`);
+    throw new Error(`Sprite ${id}: ${message}`);
   };
 
-  if (!manifest) fail("không tải được.");
+  if (!sheet) fail("không tải được spritesheet.json.");
 
-  if (!Array.isArray(manifest.frames)) {
-    fail("thiếu danh sách frames.");
+  const config = BATTLE_SPRITES[id];
+
+  if (!config) fail("chưa khai báo trong BATTLE_SPRITES.");
+
+  if (!(sheet.frameSize?.w > 0) || !(sheet.frameSize?.h > 0)) {
+    fail("thiếu frameSize.");
   }
 
-  if (!manifest.animations?.attack?.frames?.length) {
-    fail('thiếu animation "attack".');
+  if (!sheet.frames || !sheet.animations) {
+    fail("thiếu frames hoặc animations.");
   }
 
-  const known = new Map(
-    manifest.frames.map(frame => [frame.file, frame])
-  );
+  for (const [role, code] of Object.entries(config.roles)) {
+    const steps = sheet.animations[code];
 
-  const used = getUsedFiles(manifest);
+    if (!steps?.length) {
+      fail(`vai trò "${role}" trỏ tới animation "${code}" không tồn tại.`);
+    }
 
-  for (const file of used) {
-    if (!known.has(file)) {
-      fail(`frame "${file}" có trong animation nhưng không có trong frames.`);
+    for (const step of steps) {
+      if (!sheet.frames[step.frame]) {
+        fail(`animation "${code}" dùng frame "${step.frame}" không có.`);
+      }
     }
   }
 
-  for (const file of used) {
-    const frame = known.get(file);
-
-    if (!(frame.width > 0) || !(frame.height > 0)) {
-      fail(`frame "${file}" thiếu width/height.`);
-    }
-  }
-
-  return manifest;
+  return sheet;
 }
 
-export function queueManifests(scene, ids) {
+export function queueSheets(scene, ids) {
   ids.forEach(id => {
-    scene.load.json(manifestKey(id), manifestPath(id));
+    scene.load.json(sheetKey(id), jsonPath(id));
   });
 }
 
-export function queueFrames(scene, ids) {
+export function queueImages(scene, ids) {
   ids.forEach(id => {
-    const manifest = validateManifest(
-      scene.cache.json.get(manifestKey(id)),
+    const sheet = validateSheet(
+      scene.cache.json.get(sheetKey(id)),
       id
     );
 
-    getUsedFiles(manifest).forEach(file => {
-      scene.load.image(
-        frameKey(id, file),
-        framePath(id, file)
-      );
+    scene.load.spritesheet(imageKey(id), imagePath(id), {
+      frameWidth: sheet.frameSize.w,
+      frameHeight: sheet.frameSize.h
     });
   });
 }

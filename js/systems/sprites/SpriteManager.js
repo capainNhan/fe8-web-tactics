@@ -1,13 +1,14 @@
 
-import { BattleSpriteSet } from "./BattleSpriteSet.js";
+import { SheetSpriteSet } from "./SheetSpriteSet.js";
 import {
-  manifestKey,
-  validateManifest
+  sheetKey,
+  imageKey,
+  validateSheet
 } from "./SpriteLoader.js";
 
 /**
  * SPRITE MANAGER
- * Cấp BattleSpriteSet theo id. Manifest đã được BootScene tải sẵn.
+ * Cấp SheetSpriteSet theo id. JSON và ảnh đã được BootScene tải sẵn.
  */
 export class SpriteManager {
   constructor(scene) {
@@ -17,12 +18,18 @@ export class SpriteManager {
 
   get(id) {
     if (!this.sets.has(id)) {
-      const manifest = validateManifest(
-        this.scene.cache.json.get(manifestKey(id)),
+      const sheet = validateSheet(
+        this.scene.cache.json.get(sheetKey(id)),
         id
       );
 
-      this.sets.set(id, new BattleSpriteSet(id, manifest));
+      const source = this.scene.textures
+        .get(imageKey(id))
+        .getSourceImage();
+
+      const columns = Math.floor(source.width / sheet.frameSize.w);
+
+      this.sets.set(id, new SheetSpriteSet(id, sheet, columns));
     }
 
     return this.sets.get(id);

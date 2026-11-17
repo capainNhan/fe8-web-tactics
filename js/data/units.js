@@ -2,9 +2,9 @@
 export const unitsData = [
   {
     id: "p1",
-    name: "Kiếm Sĩ",
+    name: "Kỵ Sĩ",
     team: "player",
-    battleSprite: "Char4",
+    battleSprite: "Char7",
     x: 1,
     y: 3,
 
@@ -32,9 +32,9 @@ export const unitsData = [
 
   {
     id: "e1",
-    name: "Lính Đánh Thuê",
+    name: "Kỵ Binh Địch",
     team: "enemy",
-    battleSprite: "Char2",
+    battleSprite: "Char6",
     x: 5,
     y: 3,
 

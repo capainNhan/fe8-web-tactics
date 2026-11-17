@@ -3,9 +3,13 @@ import {
   resolveStrike
 } from "../fe8Logic.js";
 import { SpriteManager } from "../systems/sprites/SpriteManager.js";
-import { frameKey } from "../systems/sprites/SpriteLoader.js";
 import { getBattleSpriteId } from "../data/battleSprites.js";
 import { log as gameLog } from "../systems/GameLog.js";
+
+// Vị trí đứng của hai bên và mặt đất trên màn hình trận đánh.
+const LEFT_X = 80;
+const RIGHT_X = 304;
+const GROUND_Y = 316;
 
 /**
  * BATTLE SCENE
@@ -13,8 +17,13 @@ import { log as gameLog } from "../systems/GameLog.js";
  * Được MapScene mở bằng scene.launch("BattleScene", { attacker, defender, onComplete }).
  * Khi xong, scene tự đóng và gọi onComplete để MapScene tiếp tục.
  *
- * Sprite của mỗi bên lấy từ manifest theo unit.battleSprite
- * (xem systems/sprites/BattleSpriteSet.js).
+ * Sprite của mỗi bên lấy từ spritesheet theo unit.battleSprite
+ * (xem systems/sprites/SheetSpriteSet.js).
+ *
+ * Cách giao chiến (theo battle của Tear Ring Saga):
+ * - Bên tấn công phi tới sát đối thủ rồi ở yên đó, KHÔNG lui về.
+ * - Bên bị đánh dù trúng hay né đều đứng tại chỗ, rồi phản công tại chỗ.
+ * - Mỗi bên giữ thế chiến đấu giữa các đòn.
  */
 export class BattleScene extends Phaser.Scene {
   constructor() {
@@ -88,23 +97,23 @@ export class BattleScene extends Phaser.Scene {
     ]);
 
     // Sprite trái (bên tấn công) nhìn sang phải, sprite phải nhìn sang trái.
-    // Điểm chân của từng frame được đặt tại (x, 316) bằng origin.
+    // Điểm chân (anchor của sheet) được đặt tại (x, GROUND_Y) bằng origin.
     const { atkSet, defSet } = this;
 
     this.attackerSprite = this.add.image(
-      110, 316, frameKey(atkSet.id, atkSet.idleFile)
+      LEFT_X, GROUND_Y, atkSet.textureKey, atkSet.idleFrame
     )
       .setScale(atkSet.scale)
       .setFlipX(atkSet.flipFor("left"));
 
     this.defenderSprite = this.add.image(
-      275, 316, frameKey(defSet.id, defSet.idleFile)
+      RIGHT_X, GROUND_Y, defSet.textureKey, defSet.idleFrame
     )
       .setScale(defSet.scale)
       .setFlipX(defSet.flipFor("right"));
 
-    atkSet.applyFrame(this.attackerSprite, atkSet.idleFile);
-    defSet.applyFrame(this.defenderSprite, defSet.idleFile);
+    atkSet.applyFrame(this.attackerSprite, atkSet.idleFrame);
+    defSet.applyFrame(this.defenderSprite, defSet.idleFrame);
 
     this.attackerName = this.add.text(
       18,
@@ -192,13 +201,36 @@ export class BattleScene extends Phaser.Scene {
   // ANIMATION
   // ==========================================
 
-  // Phát một animation (danh sách frame) trên sprite.
-  async playFrames(sprite, set, animation) {
-    for (const file of animation.frames) {
-      set.applyFrame(sprite, file);
+  // Phát một animation một lần: mỗi bước giữ đúng số ms của nó.
+  async playSteps(sprite, set, animation) {
+    for (const step of animation.steps) {
+      set.applyFrame(sprite, step.index);
 
-      await this.wait(animation.frameDurationMs);
+      await this.wait(step.ms);
     }
+  }
+
+  // Phát animation lặp lại cho tới khi gọi stop().
+  startLoop(sprite, set, animation) {
+    const handle = { stopped: false };
+
+    handle.done = (async () => {
+      while (!handle.stopped) {
+        for (const step of animation.steps) {
+          if (handle.stopped) break;
+
+          set.applyFrame(sprite, step.index);
+
+          await this.wait(step.ms);
+        }
+      }
+    })();
+
+    handle.stop = () => {
+      handle.stopped = true;
+    };
+
+    return handle;
   }
 
   wait(ms) {
@@ -380,19 +412,25 @@ export class BattleScene extends Phaser.Scene {
     this.battleUI.setVisible(true);
 
     this.attackerSprite
-      .setPosition(110, 316)
+      .setPosition(LEFT_X, GROUND_Y)
       .setVisible(true)
       .setAlpha(1)
       .clearTint();
 
     this.defenderSprite
-      .setPosition(275, 316)
+      .setPosition(RIGHT_X, GROUND_Y)
       .setVisible(true)
       .setAlpha(1)
       .clearTint();
 
-    atkSet.applyFrame(this.attackerSprite, atkSet.idleFile);
-    defSet.applyFrame(this.defenderSprite, defSet.idleFile);
+    atkSet.applyFrame(this.attackerSprite, atkSet.idleFrame);
+    defSet.applyFrame(this.defenderSprite, defSet.idleFrame);
+
+    // Trạng thái từng bên: đã vào thế chiến đấu chưa, đã ra đòn mấy lần.
+    this.fighters = new Map([
+      [this.attackerSprite, { ready: false, strikes: 0, approaches: true }],
+      [this.defenderSprite, { ready: false, strikes: 0, approaches: false }]
+    ]);
 
     this.attackerName.setText(atk.name);
     this.defenderName.setText(def.name);
@@ -496,7 +534,7 @@ export class BattleScene extends Phaser.Scene {
     const isLeft = startX < defenderStartX;
 
     const targetX =
-      defenderStartX + (isLeft ? -55 : 55);
+      defenderStartX + (isLeft ? -set.reach : set.reach);
 
     const result = resolveStrike(
       { ...atk },
@@ -512,7 +550,6 @@ export class BattleScene extends Phaser.Scene {
         atkSp,
         defSp,
         set,
-        startX,
         defenderStartX,
         targetX,
         isLeft
@@ -528,22 +565,18 @@ export class BattleScene extends Phaser.Scene {
     } finally {
       this.tweens.resumeAll();
 
-      // Lưới an toàn: nếu animation lỗi giữa chừng, đưa sprite về chỗ cũ.
-      if (Math.abs(atkSp.x - startX) > 0.5) {
-        await this.runTween({
-          targets: atkSp,
-          x: startX,
-          duration: 170,
-          ease: "Power2"
-        }, 900);
-      }
-
       atkSp
         .setAlpha(1)
         .clearTint();
 
+      // Đòn xong: đứng yên tại chỗ trong thế chiến đấu, không lui về.
       if (atk.hp > 0) {
-        set.applyFrame(atkSp, set.idleFile);
+        const state = this.fighters.get(atkSp);
+
+        set.applyFrame(
+          atkSp,
+          state?.ready ? set.stanceFrame : set.idleFrame
+        );
       }
 
       if (def.hp > 0) {
@@ -559,6 +592,62 @@ export class BattleScene extends Phaser.Scene {
   }
 
   // ==========================================
+  // STANCE / APPROACH
+  // ==========================================
+
+  // Đưa một bên vào thế chiến đấu. Bên chủ động phi tới sát đối thủ
+  // (chỉ lần đầu); bên phản công chỉ quay thế tại chỗ.
+  async enterStance(sp, set, state, targetX) {
+    if (state.ready) return;
+
+    if (state.approaches) {
+      const move = set.animation("move");
+      const distance = Math.abs(targetX - sp.x);
+
+      const gallop = move
+        ? this.startLoop(sp, set, move)
+        : null;
+
+      await this.runTween({
+        targets: sp,
+        x: targetX,
+        duration: Math.max(260, distance * 3.5),
+        ease: "Quad.easeOut"
+      }, 1500);
+
+      if (gallop) {
+        gallop.stop();
+        await gallop.done;
+      }
+
+      state.approaches = false;
+    }
+
+    const ready = set.animation("ready");
+
+    if (ready) {
+      await this.playSteps(sp, set, ready);
+    }
+
+    state.ready = true;
+
+    set.applyFrame(sp, set.stanceFrame);
+  }
+
+  // Bên bị đánh mà né được: lách nhẹ rồi về chỗ cũ.
+  async dodgeEffect(sprite, startX, isLeft) {
+    await this.runTween({
+      targets: sprite,
+      x: startX + (isLeft ? 14 : -14),
+      duration: 90,
+      yoyo: true,
+      ease: "Quad.easeOut"
+    }, 400);
+
+    sprite.x = startX;
+  }
+
+  // ==========================================
   // ANIMATED STRIKE
   // ==========================================
 
@@ -569,54 +658,37 @@ export class BattleScene extends Phaser.Scene {
     atkSp,
     defSp,
     set,
-    startX,
     defenderStartX,
     targetX,
     isLeft
   ) {
-    const windup = set.animation("windup");
-    const retreat = set.animation("return");
+    const state = this.fighters.get(atkSp);
 
-    // Đòn chí mạng dùng animation "crit" nếu manifest có.
-    const attack =
-      (result.hit && result.crit && set.animation("crit")) ||
-      set.animation("attack");
+    // Chọn animation: chí mạng > đòn tiếp theo > đòn đầu.
+    let role = "attack";
+
+    if (result.hit && result.crit && set.hasAnimation("crit")) {
+      role = "crit";
+    } else if (state.strikes > 0 && set.hasAnimation("attack2")) {
+      role = "attack2";
+    }
+
+    const attack = set.animation(role);
 
     if (!attack) {
       throw new Error(
-        set.id + ' không có animation "attack".'
+        set.id + ' không có animation "' + role + '".'
       );
     }
 
-    const delay = attack.frameDurationMs;
+    state.strikes += 1;
 
-    // Thế chuẩn bị.
-    set.applyFrame(atkSp, set.idleFile);
+    await this.enterStance(atkSp, set, state, targetX);
 
-    if (windup) {
-      await this.playFrames(atkSp, set, windup);
-    } else {
-      await this.wait(delay);
-    }
+    const attackAnimation = this.playSteps(atkSp, set, attack);
 
-    // Di chuyển và animation tấn công chạy song song.
-    const movement = this.runTween({
-      targets: atkSp,
-      x: targetX,
-      duration: 220,
-      ease: "Power2"
-    }, 1000);
-
-    const attackAnimation = this.playFrames(
-      atkSp,
-      set,
-      attack
-    );
-
-    // Chờ tới frame va chạm (impactFrame trong manifest).
-    await this.wait(
-      attack.impactFrame * delay + 20
-    );
+    // Chờ tới thời điểm va chạm (cộng dồn ms các bước trước impact).
+    await this.wait(attack.impactMs + 20);
 
     // HP chỉ được thay đổi một lần tại điểm va chạm.
     if (result.hit) {
@@ -668,41 +740,14 @@ export class BattleScene extends Phaser.Scene {
       this.log(
         atk.name + " đánh trượt!"
       );
+
+      await this.dodgeEffect(defSp, defenderStartX, isLeft);
     }
 
-    // Chờ cả chuyển động và animation đánh hoàn tất.
-    await Promise.all([
-      movement,
-      attackAnimation
-    ]);
+    // Chờ animation đánh chạy hết, rồi đứng yên tại chỗ.
+    await attackAnimation;
 
-    // Lui về bằng animation "return" nếu có, không thì chỉ trượt về.
-    if (retreat) {
-      const retreatMovement = this.runTween({
-        targets: atkSp,
-        x: startX,
-        duration: Math.max(
-          180,
-          retreat.frames.length * retreat.frameDurationMs
-        ),
-        ease: "Power2"
-      }, 1500);
-
-      await Promise.all([
-        retreatMovement,
-        this.playFrames(atkSp, set, retreat)
-      ]);
-
-    } else {
-      await this.runTween({
-        targets: atkSp,
-        x: startX,
-        duration: 170,
-        ease: "Power2"
-      }, 900);
-    }
-
-    set.applyFrame(atkSp, set.idleFile);
+    set.applyFrame(atkSp, set.stanceFrame);
   }
 
   // ==========================================

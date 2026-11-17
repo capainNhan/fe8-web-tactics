@@ -3,8 +3,8 @@ import {
   BATTLE_SPRITE_IDS
 } from "../data/battleSprites.js";
 import {
-  queueManifests,
-  queueFrames
+  queueSheets,
+  queueImages
 } from "../systems/sprites/SpriteLoader.js";
 import { log } from "../systems/GameLog.js";
 
@@ -24,12 +24,12 @@ export class BootScene extends Phaser.Scene {
       file => console.error("Lỗi tải asset:", file.key, file.src)
     );
 
-    queueManifests(this, BATTLE_SPRITE_IDS);
+    queueSheets(this, BATTLE_SPRITE_IDS);
   }
 
   create() {
     try {
-      queueFrames(this, BATTLE_SPRITE_IDS);
+      queueImages(this, BATTLE_SPRITE_IDS);
 
     } catch (error) {
       this.showError(error);
