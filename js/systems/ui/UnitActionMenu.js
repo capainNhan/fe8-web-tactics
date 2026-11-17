@@ -1,4 +1,5 @@
 import {
+  px,
   TILE,
   GAME_WIDTH,
   GAME_HEIGHT
@@ -13,14 +14,14 @@ export class UnitActionMenu {
       .setVisible(false);
 
     this.background = scene.add.rectangle(
-      0, 0, 112, 86, 0x18263b, 0.98
+      0, 0, px(112), px(86), 0x18263b, 0.98
     ).setOrigin(0);
 
     this.border = scene.add.rectangle(
-      0, 0, 112, 86
+      0, 0, px(112), px(86)
     )
       .setOrigin(0)
-      .setStrokeStyle(2, 0xc5a86a);
+      .setStrokeStyle(px(2), 0xc5a86a);
 
     this.container.add([
       this.background,
@@ -35,18 +36,18 @@ export class UnitActionMenu {
     this.hide();
 
     const scene = this.scene;
-    const width = 112;
-    const rowHeight = 25;
-    const height = actions.length * rowHeight + 12;
+    const width = px(112);
+    const rowHeight = px(25);
+    const height = actions.length * rowHeight + px(12);
 
     const x = Math.min(
-      Math.max(4, unit.x * TILE + TILE),
-      GAME_WIDTH - width - 4
+      Math.max(px(4), unit.x * TILE + TILE),
+      GAME_WIDTH - width - px(4)
     );
 
     const y = Math.min(
-      Math.max(4, unit.y * TILE),
-      GAME_HEIGHT - height - 4
+      Math.max(px(4), unit.y * TILE),
+      GAME_HEIGHT - height - px(4)
     );
 
     this.container.setPosition(x, y);
@@ -55,12 +56,12 @@ export class UnitActionMenu {
 
     actions.forEach((action, index) => {
       const label = scene.add.text(
-        10,
-        7 + index * rowHeight,
+        px(10),
+        px(7) + index * rowHeight,
         action.label,
         {
           fontFamily: "Arial",
-          fontSize: "13px",
+          fontSize: `${px(13)}px`,
           color: action.enabled ? "#f4e5bd" : "#777777",
           fontStyle: "bold"
         }

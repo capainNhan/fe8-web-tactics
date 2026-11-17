@@ -50,13 +50,13 @@ export class BootScene extends Phaser.Scene {
     log("Lỗi tải sprite: " + error.message);
 
     this.add.text(
-      12,
-      12,
+      20,
+      20,
       "Lỗi tải sprite:\n" + error.message,
       {
-        fontSize: "12px",
+        fontSize: "20px",
         color: "#fca5a5",
-        wordWrap: { width: 360 }
+        wordWrap: { width: 720 }
       }
     );
   }

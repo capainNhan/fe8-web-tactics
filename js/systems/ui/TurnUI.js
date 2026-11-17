@@ -1,5 +1,5 @@
 
-import { GAME_WIDTH } from "../../config.js";
+import { GAME_WIDTH, px } from "../../config.js";
 
 /**
  * TURN UI
@@ -13,26 +13,26 @@ export class TurnUI {
       .setDepth(2000);
 
     this.label = scene.add.text(
-      8,
-      8,
+      px(8),
+      px(8),
       "",
       {
-        fontSize: "12px",
+        fontSize: `${px(12)}px`,
         color: "#ffffff",
         backgroundColor: "#111827",
-        padding: { x: 7, y: 5 }
+        padding: { x: px(7), y: px(5) }
       }
     );
 
     this.endButton = scene.add.text(
-      GAME_WIDTH - 8,
-      8,
+      GAME_WIDTH - px(8),
+      px(8),
       "KẾT THÚC LƯỢT",
       {
-        fontSize: "11px",
+        fontSize: `${px(11)}px`,
         color: "#ffffff",
         backgroundColor: "#166534",
-        padding: { x: 8, y: 6 }
+        padding: { x: px(8), y: px(6) }
       }
     )
       .setOrigin(1, 0)

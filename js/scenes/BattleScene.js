@@ -4,6 +4,7 @@ import {
 } from "../fe8Logic.js";
 import { SpriteManager } from "../systems/sprites/SpriteManager.js";
 import { getBattleSpriteId } from "../data/battleSprites.js";
+import { UI_SCALE } from "../config.js";
 import { log as gameLog } from "../systems/GameLog.js";
 
 // Vị trí đứng của hai bên và mặt đất trên màn hình trận đánh.
@@ -75,8 +76,11 @@ export class BattleScene extends Phaser.Scene {
   // ==========================================
 
   createBattleScreen() {
+    // Bố cục battle viết theo toạ độ 384x384, phóng bằng UI_SCALE
+    // để khớp khung game (xem config.js).
     this.battleUI = this.add.container(0, 0)
       .setDepth(1000)
+      .setScale(UI_SCALE)
       .setVisible(false);
 
     this.battleUI.add([
@@ -122,6 +126,7 @@ export class BattleScene extends Phaser.Scene {
       "",
       {
         fontSize: "13px",
+        resolution: UI_SCALE,
         color: "#38bdf8"
       }
     );
@@ -132,6 +137,7 @@ export class BattleScene extends Phaser.Scene {
       "",
       {
         fontSize: "13px",
+        resolution: UI_SCALE,
         color: "#f87171"
       }
     ).setOrigin(1, 0);
@@ -142,6 +148,7 @@ export class BattleScene extends Phaser.Scene {
       "",
       {
         fontSize: "12px",
+        resolution: UI_SCALE,
         color: "#fff"
       }
     );
@@ -152,6 +159,7 @@ export class BattleScene extends Phaser.Scene {
       "",
       {
         fontSize: "12px",
+        resolution: UI_SCALE,
         color: "#fff"
       }
     ).setOrigin(1, 0);
@@ -170,6 +178,7 @@ export class BattleScene extends Phaser.Scene {
       "BATTLE START!",
       {
         fontSize: "13px",
+        resolution: UI_SCALE,
         color: "#facc15",
         align: "center",
         wordWrap: { width: 350 }

@@ -1,5 +1,5 @@
 
-import { TILE, GRID } from "../../config.js";
+import { TILE, GRID, px } from "../../config.js";
 
 /**
  * MAP RENDERER
@@ -35,7 +35,7 @@ export class MapRenderer {
           TILE
         );
 
-        g.lineStyle(1, 0x44445a);
+        g.lineStyle(px(1), 0x44445a);
 
         g.strokeRect(
           x * TILE,
@@ -73,28 +73,28 @@ export class MapRenderer {
     const circle = scene.add.circle(
       0,
       0,
-      18,
+      px(18),
       unit.team === "player"
         ? 0x3498db
         : 0xe74c3c
     );
 
     const label = scene.add.text(
-      -7,
-      -9,
+      px(-7),
+      px(-9),
       unit.team === "player" ? "P" : "E",
       {
-        fontSize: "15px",
+        fontSize: `${px(15)}px`,
         color: "#fff"
       }
     );
 
     const hpBackground = scene.add.rectangle(
-      0, 20, 32, 5, 0x000000
+      0, px(20), px(32), px(5), 0x000000
     );
 
     const hpBar = scene.add.rectangle(
-      -16, 20, 32, 5, 0x22c55e
+      px(-16), px(20), px(32), px(5), 0x22c55e
     ).setOrigin(0, 0.5);
 
     container.add([
@@ -140,7 +140,7 @@ export class MapRenderer {
 
     token.hpBar.width = Math.max(
       0,
-      32 * (unit.hp / unit.maxHp)
+      px(32) * (unit.hp / unit.maxHp)
     );
   }
 
