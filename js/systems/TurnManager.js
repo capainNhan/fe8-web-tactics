@@ -1,4 +1,5 @@
 
+// phase = tên phe đang được đi ("player" | "enemy"). Chỉ đơn vị của phe đó mới hành động được.
 export class TurnManager {
   constructor() {
     this.phase = "player";
@@ -18,8 +19,7 @@ export class TurnManager {
 
   canMove(unit) {
     return (
-      this.phase === "player" &&
-      unit.team === "player" &&
+      unit.team === this.phase &&
       !unit.hasMoved &&
       !unit.hasActed &&
       unit.hp > 0
@@ -28,8 +28,7 @@ export class TurnManager {
 
   canAct(unit) {
     return (
-      this.phase === "player" &&
-      unit.team === "player" &&
+      unit.team === this.phase &&
       !unit.hasActed &&
       unit.hp > 0
     );
