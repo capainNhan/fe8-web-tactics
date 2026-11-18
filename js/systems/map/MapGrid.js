@@ -1,5 +1,6 @@
 
 import { GRID } from "../../config.js";
+import { getReachableTiles } from "./Pathfinding.js";
 
 /**
  * MAP GRID
@@ -26,9 +27,14 @@ export function unitAt(units, x, y) {
 
 /**
  * Các ô đơn vị có thể di chuyển tới.
- * Hiện dùng khoảng cách Manhattan, chưa tính địa hình hay chặn đường.
+ * Có terrainMap: tính theo chi phí địa hình và bị địch chặn đường (Pathfinding.js).
+ * Không có terrainMap: dùng khoảng cách Manhattan như bản cũ.
  */
-export function getMoveTiles(unit, units) {
+export function getMoveTiles(unit, units, terrainMap) {
+  if (terrainMap) {
+    return getReachableTiles(unit, units, terrainMap);
+  }
+
   const tiles = [];
 
   for (let y = 0; y < GRID; y++) {

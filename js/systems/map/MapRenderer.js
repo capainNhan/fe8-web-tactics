@@ -1,5 +1,6 @@
 
 import { TILE, GRID, px } from "../../config.js";
+import { TerrainRenderer } from "./TerrainRenderer.js";
 import { SpriteManager } from "../sprites/SpriteManager.js";
 import { getBattleSpriteId } from "../../data/battleSprites.js";
 
@@ -8,9 +9,18 @@ import { getBattleSpriteId } from "../../data/battleSprites.js";
  * Vẽ bàn cờ, ô sáng và token của đơn vị trên map.
  * Chỉ lo phần hiển thị, không chứa luật chơi.
  */
+// Token thiết kế theo ô 96px; co theo TILE thật của bản đồ.
+const FIT = TILE / px(48);
+const u = n => px(n) * FIT;
+
 export class MapRenderer {
-  constructor(scene) {
+  constructor(scene, terrainMap) {
     this.scene = scene;
+
+    // Địa hình vẽ một lần, nằm dưới lưới và ô sáng.
+    this.terrain = new TerrainRenderer(scene, terrainMap);
+    this.terrain.draw();
+
     this.graphics = scene.add.graphics();
     this.sprites = new SpriteManager(scene);
 
@@ -23,41 +33,22 @@ export class MapRenderer {
 
     g.clear();
 
+    // Đường lưới mờ phủ lên địa hình.
+    g.lineStyle(px(1), 0x000000, 0.22);
+
     for (let y = 0; y < GRID; y++) {
       for (let x = 0; x < GRID; x++) {
-        g.fillStyle(
-          (x + y) % 2 === 0
-            ? 0x22223b
-            : 0x2a2a4a
-        );
-
-        g.fillRect(
-          x * TILE,
-          y * TILE,
-          TILE,
-          TILE
-        );
-
-        g.lineStyle(px(1), 0x44445a);
-
-        g.strokeRect(
-          x * TILE,
-          y * TILE,
-          TILE,
-          TILE
-        );
+        g.strokeRect(x * TILE, y * TILE, TILE, TILE);
       }
     }
 
+    // Ô có thể di chuyển tới.
     highlightTiles.forEach(t => {
-      g.fillStyle(0x2ecc71, 0.4);
+      g.fillStyle(0x38bdf8, 0.45);
+      g.fillRect(t.x * TILE, t.y * TILE, TILE, TILE);
 
-      g.fillRect(
-        t.x * TILE,
-        t.y * TILE,
-        TILE,
-        TILE
-      );
+      g.lineStyle(px(1), 0xe0f2fe, 0.8);
+      g.strokeRect(t.x * TILE, t.y * TILE, TILE, TILE);
     });
   }
 
@@ -75,11 +66,11 @@ export class MapRenderer {
     );
 
     // Chân nhân vật đứng thấp hơn tâm ô một chút, chừa chỗ cho thanh HP.
-    const footY = px(16);
+    const footY = u(16);
 
     // Bóng dưới chân mang màu phe, để phân biệt khi hai bên dùng chung sprite.
     const shadow = scene.add.ellipse(
-      0, footY, px(34), px(11), teamColor, 0.85
+      0, footY, u(34), u(11), teamColor, 0.85
     );
 
     container.add(shadow);
@@ -89,11 +80,11 @@ export class MapRenderer {
     container.add(body);
 
     const hpBackground = scene.add.rectangle(
-      0, px(21), px(32), px(5), 0x000000
+      0, u(21), u(32), u(5), 0x000000
     );
 
     const hpBar = scene.add.rectangle(
-      px(-16), px(21), px(32), px(5), 0x22c55e
+      u(-16), u(21), u(32), u(5), 0x22c55e
     ).setOrigin(0, 0.5);
 
     container.add([hpBackground, hpBar]);
@@ -183,7 +174,7 @@ export class MapRenderer {
       const fallback = scene.add.container(0, 0);
 
       fallback.add([
-        scene.add.circle(0, 0, px(18), teamColor),
+        scene.add.circle(0, 0, u(18), teamColor),
         scene.add.text(
           px(-7),
           px(-9),
@@ -229,7 +220,7 @@ export class MapRenderer {
 
     token.hpBar.width = Math.max(
       0,
-      px(32) * (unit.hp / unit.maxHp)
+      u(32) * (unit.hp / unit.maxHp)
     );
   }
 
