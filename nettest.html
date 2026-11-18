@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>FE8 - Thử kết nối</title>
+  <style>
+    :root { color-scheme: dark; }
+    * { box-sizing: border-box; }
+    body { margin: 0; padding: 12px; background: #0f1020; color: #e5e7eb; font: 15px/1.4 system-ui, sans-serif; }
+    h1 { font-size: 18px; margin: 0 0 4px; }
+    p.hint { margin: 0 0 12px; color: #9ca3af; font-size: 13px; }
+    input, select, button { font: inherit; padding: 10px 12px; border-radius: 8px; border: 1px solid #374151; background: #1f2937; color: #fff; }
+    button { cursor: pointer; background: #2563eb; border-color: #2563eb; }
+    button.secondary { background: #1f2937; border-color: #374151; }
+    button:disabled { opacity: .5; }
+    .row { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 8px; align-items: center; }
+    .row > input { flex: 1; min-width: 120px; }
+    .card { background: #151729; border: 1px solid #2b2e4a; border-radius: 10px; padding: 10px; margin-bottom: 10px; }
+    #code { font-size: 28px; letter-spacing: 4px; font-weight: 700; color: #fbbf24; }
+    #status { font-weight: 600; }
+    canvas { width: 100%; max-width: 640px; height: auto; display: block; border-radius: 8px; touch-action: manipulation; }
+    #players div { display: flex; justify-content: space-between; padding: 2px 0; }
+    #log { height: 160px; overflow-y: auto; font: 12px/1.5 ui-monospace, monospace; color: #cbd5e1; white-space: pre-wrap; }
+    .ok { color: #34d399; } .bad { color: #f87171; } .warn { color: #fbbf24; }
+    [hidden] { display: none !important; }
+  </style>
+</head>
+<body>
+  <h1>Thử kết nối nhiều người</h1>
+  <p class="hint">Trang thử riêng, không ảnh hưởng game chính. GM tạo phòng, bạn bè nhập mã để vào và cùng di chuyển token.</p>
+
+  <div id="lobby" class="card">
+    <div class="row"><input id="name" placeholder="Tên của bạn" maxlength="20"></div>
+    <div class="row"><button id="create">Tạo phòng (GM)</button></div>
+    <div class="row">
+      <input id="joinCode" placeholder="Mã phòng" maxlength="8" autocapitalize="characters">
+      <button id="join" class="secondary">Vào phòng</button>
+    </div>
+    <div id="lobbyMsg" class="bad"></div>
+  </div>
+
+  <div id="room" hidden>
+    <div class="card">
+      <div class="row">
+        <div><div class="hint" style="margin:0">Mã phòng</div><div id="code"></div></div>
+        <button id="share" class="secondary">Chia sẻ</button>
+        <button id="leave" class="secondary">Rời</button>
+      </div>
+      <div id="status"></div>
+      <div id="turnInfo" class="hint"></div>
+    </div>
+
+    <div id="gmTools" class="card" hidden>
+      <div class="row">
+        <select id="team"><option value="player">Điều khiển: phe người chơi</option><option value="enemy">Điều khiển: phe địch</option></select>
+        <button id="endTurn">Kết thúc lượt</button>
+        <button id="reset" class="secondary">Chơi lại</button>
+      </div>
+      <div id="wake" class="hint"></div>
+    </div>
+
+    <div class="card"><canvas id="map" width="720" height="720"></canvas></div>
+    <div class="card"><div class="hint">Người trong phòng</div><div id="players"></div></div>
+    <div class="card"><div class="hint">Nhật ký</div><div id="log"></div></div>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/peerjs@1.5.4/dist/peerjs.min.js"></script>
+  <script type="module" src="js/net/nettest.js"></script>
+</body>
+</html>
