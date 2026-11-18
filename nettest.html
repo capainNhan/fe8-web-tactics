@@ -21,6 +21,7 @@
     #status { font-weight: 600; }
     canvas { width: 100%; max-width: 640px; height: auto; display: block; border-radius: 8px; touch-action: manipulation; }
     #players div { display: flex; justify-content: space-between; padding: 2px 0; }
+    #diag { white-space: pre-wrap; font-size: 13px; margin-top: 6px; }
     #log { height: 160px; overflow-y: auto; font: 12px/1.5 ui-monospace, monospace; color: #cbd5e1; white-space: pre-wrap; }
     .ok { color: #34d399; } .bad { color: #f87171; } .warn { color: #fbbf24; }
     [hidden] { display: none !important; }
@@ -38,6 +39,12 @@
       <button id="join" class="secondary">Vào phòng</button>
     </div>
     <div id="lobbyMsg" class="bad"></div>
+    <div class="row" style="margin-top:8px"><button id="diagnose" class="secondary">Chẩn đoán mạng</button></div>
+    <div id="diag"></div>
+    <details style="margin-top:8px">
+      <summary class="hint">Nâng cao: thêm máy chủ TURN riêng (tuỳ chọn)</summary>
+      <textarea id="ice" rows="4" style="width:100%;margin-top:6px;border-radius:8px;border:1px solid #374151;background:#1f2937;color:#fff;padding:8px;font:12px ui-monospace,monospace" placeholder='[{"urls":"turn:ten-may-chu:3478","username":"...","credential":"..."}]'></textarea>
+    </details>
   </div>
 
   <div id="room" hidden>
