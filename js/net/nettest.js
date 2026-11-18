@@ -8,6 +8,8 @@ import { PeerTransport } from "./PeerTransport.js";
 import { HostSession } from "./HostSession.js";
 import { ClientSession } from "./ClientSession.js";
 import { HEARTBEAT_MS } from "./protocol.js";
+import { runDiagnostics } from "./diagnose.js";
+import { DEFAULT_ICE_SERVERS } from "./PeerTransport.js";
 
 /**
  * Trang thử kết nối (nettest.html). Chỉ để kiểm tra mạng, không dùng Phaser.
@@ -69,6 +71,33 @@ function makeCode() {
   return Array.from({ length: 5 }, () =>
     alphabet[Math.floor(Math.random() * alphabet.length)]
   ).join("");
+}
+
+// Máy chủ TURN riêng do người dùng dán vào ô "Nâng cao" (JSON), nhớ trong máy.
+function extraIceServers() {
+  const box = $("ice");
+  const raw = box.value.trim();
+
+  localStorage.setItem("fe8_ice", raw);
+
+  if (!raw) return [];
+
+  try {
+    const list = JSON.parse(raw);
+
+    return Array.isArray(list) ? list : [list];
+  } catch {
+    $("lobbyMsg").textContent = "Ô TURN riêng không phải JSON hợp lệ, đã bỏ qua.";
+
+    return [];
+  }
+}
+
+function makeTransport() {
+  return new PeerTransport({
+    extraIceServers: extraIceServers(),
+    onStage: text => { $("lobbyMsg").className = "warn"; $("lobbyMsg").textContent = text; }
+  });
 }
 
 function setStatus(text, cls = "") {
@@ -260,7 +289,7 @@ async function createRoom() {
 
   try {
     ui.role = "host";
-    ui.transport = new PeerTransport();
+    ui.transport = makeTransport();
     ui.session = new HostSession({ state: ui.state, transport: ui.transport, code });
 
     ui.session
@@ -280,6 +309,7 @@ async function createRoom() {
     requestWakeLock();
   } catch (error) {
     ui.session = null;
+    $("lobbyMsg").className = "bad";
     $("lobbyMsg").textContent = error.message;
     $("create").disabled = false;
   }
@@ -293,12 +323,13 @@ async function joinRoom() {
     return;
   }
 
+  $("lobbyMsg").className = "warn";
   $("lobbyMsg").textContent = "Đang kết nối...";
   $("join").disabled = true;
 
   try {
     ui.role = "client";
-    ui.transport = new PeerTransport();
+    ui.transport = makeTransport();
     ui.session = new ClientSession({ state: ui.state, transport: ui.transport });
 
     ui.session
@@ -319,10 +350,31 @@ async function joinRoom() {
   } catch (error) {
     ui.session?.leave();
     ui.session = null;
+    $("lobbyMsg").className = "bad";
     $("lobbyMsg").textContent = error.message;
     $("join").disabled = false;
   }
 }
+
+$("diagnose").addEventListener("click", async () => {
+  const box = $("diag");
+
+  box.innerHTML = "";
+  $("diagnose").disabled = true;
+
+  await runDiagnostics({
+    iceServers: [...DEFAULT_ICE_SERVERS, ...extraIceServers()],
+    report: (text, level) => {
+      const line = document.createElement("div");
+
+      line.textContent = text;
+      line.className = level;
+      box.appendChild(line);
+    }
+  });
+
+  $("diagnose").disabled = false;
+});
 
 $("create").addEventListener("click", () => { playerName(); createRoom(); });
 $("join").addEventListener("click", joinRoom);
@@ -363,6 +415,7 @@ $("team").addEventListener("change", () => { ui.selected = null; render(); });
 /* ---------- khởi động ---------- */
 
 $("name").value = localStorage.getItem("fe8_name") ?? "";
+$("ice").value = localStorage.getItem("fe8_ice") ?? "";
 
 const preset = new URLSearchParams(location.search).get("room");
 

@@ -13,14 +13,40 @@
  */
 
 const PREFIX = "fe8tac-";
-const CONNECT_TIMEOUT_MS = 15000;
+const CONNECT_TIMEOUT_MS = 20000;
+
+/**
+ * Danh sách máy chủ hỗ trợ vượt NAT.
+ *  - STUN: giúp hai máy biết địa chỉ công khai của nhau (miễn phí, Google).
+ *  - TURN: chuyển tiếp dữ liệu khi kết nối trực tiếp bị chặn (thường là 4G).
+ * Các máy chủ TURN công cộng miễn phí có thể ngừng hoạt động hoặc quá tải bất cứ lúc nào.
+ * Có thể thêm máy chủ của riêng bạn qua tham số `extraIceServers`.
+ */
+export const DEFAULT_ICE_SERVERS = [
+  { urls: ["stun:stun.l.google.com:19302", "stun:stun1.l.google.com:19302"] },
+  {
+    urls: ["turn:eu-0.turn.peerjs.com:3478", "turn:us-0.turn.peerjs.com:3478"],
+    username: "peerjs",
+    credential: "peerjsp"
+  },
+  {
+    urls: [
+      "turn:openrelay.metered.ca:80",
+      "turn:openrelay.metered.ca:443",
+      "turn:openrelay.metered.ca:443?transport=tcp"
+    ],
+    username: "openrelayproject",
+    credential: "openrelayproject"
+  }
+];
 
 const ERROR_TEXT = {
-  "peer-unavailable": "Không tìm thấy phòng với mã này.",
+  "peer-unavailable": "Không tìm thấy phòng với mã này (GM đã tạo phòng và còn mở trang chưa?).",
   "unavailable-id": "Mã phòng đã bị trùng, hãy tạo lại.",
   "network": "Không kết nối được tới máy chủ trung gian của PeerJS.",
   "server-error": "Máy chủ trung gian của PeerJS đang lỗi.",
   "socket-error": "Mất kết nối tới máy chủ trung gian của PeerJS.",
+  "socket-closed": "Máy chủ trung gian của PeerJS đã đóng kết nối.",
   "browser-incompatible": "Trình duyệt này không hỗ trợ kết nối trực tiếp (WebRTC)."
 };
 
@@ -45,9 +71,15 @@ function wrap(dataConnection) {
 }
 
 export class PeerTransport {
-  constructor({ PeerClass = globalThis.Peer, config } = {}) {
+  constructor({
+    PeerClass = globalThis.Peer,
+    extraIceServers = [],
+    onStage = null
+  } = {}) {
     this.PeerClass = PeerClass;
-    this.config = config;
+    this.iceServers = [...DEFAULT_ICE_SERVERS, ...extraIceServers];
+    this.onStage = onStage; // (text) => void, báo tiến trình để hiện lên màn hình
+
     this.peer = null;
     this.onConnection = null;
     this.onError = null;
@@ -59,16 +91,37 @@ export class PeerTransport {
     }
   }
 
+  stage(text) {
+    this.onStage?.(text);
+  }
+
+  options() {
+    return { config: { iceServers: this.iceServers } };
+  }
+
   listen(code) {
     this.ensureLibrary();
 
     return new Promise((resolve, reject) => {
-      const peer = new this.PeerClass(PREFIX + code, this.config);
+      this.stage("Đang kết nối máy chủ trung gian PeerJS...");
+
+      const peer = new this.PeerClass(PREFIX + code, this.options());
 
       this.peer = peer;
 
-      peer.on("open", () => resolve());
+      const timer = setTimeout(
+        () => reject(new Error("Không nối được máy chủ trung gian PeerJS. Mạng có thể đang chặn, hoặc máy chủ miễn phí đang quá tải.")),
+        CONNECT_TIMEOUT_MS
+      );
+
+      peer.on("open", () => {
+        clearTimeout(timer);
+        resolve();
+      });
+
       peer.on("error", error => {
+        clearTimeout(timer);
+
         const message = describe(error);
 
         reject(new Error(message));
@@ -76,6 +129,7 @@ export class PeerTransport {
       });
 
       peer.on("connection", dataConnection => {
+        this.stage("Có người đang kết nối...");
         this.onConnection?.(wrap(dataConnection));
       });
 
@@ -94,11 +148,15 @@ export class PeerTransport {
     this.ensureLibrary();
 
     return new Promise((resolve, reject) => {
-      const peer = new this.PeerClass(this.config);
+      let finished = false;
+      let step = "signaling";
+      let dataConnection = null;
+
+      this.stage("Bước 1/2: nối máy chủ trung gian PeerJS...");
+
+      const peer = new this.PeerClass(undefined, this.options());
 
       this.peer = peer;
-
-      let finished = false;
 
       const fail = message => {
         if (finished) return;
@@ -109,15 +167,24 @@ export class PeerTransport {
         reject(new Error(message));
       };
 
-      const timer = setTimeout(
-        () => fail("Hết thời gian chờ. Mạng của bạn hoặc của GM có thể đang chặn kết nối trực tiếp."),
-        CONNECT_TIMEOUT_MS
-      );
+      const timer = setTimeout(() => {
+        if (step === "signaling") {
+          fail("Bước 1 thất bại: không nối được máy chủ trung gian PeerJS. Mạng có thể đang chặn, hoặc máy chủ miễn phí đang quá tải. Thử đổi mạng, hoặc bấm Chẩn đoán mạng.");
+          return;
+        }
+
+        const state = dataConnection?.peerConnection?.iceConnectionState ?? "không rõ";
+
+        fail(`Bước 2 thất bại: đã tìm thấy phòng nhưng không thiết lập được đường truyền với máy GM (trạng thái ICE: ${state}). Thường do NAT hoặc mạng 4G chặn kết nối trực tiếp, và máy chủ chuyển tiếp (TURN) miễn phí không dùng được. Hãy bấm Chẩn đoán mạng.`);
+      }, CONNECT_TIMEOUT_MS);
 
       peer.on("error", error => fail(describe(error)));
 
       peer.on("open", () => {
-        const dataConnection = peer.connect(PREFIX + code, {
+        step = "ice";
+        this.stage("Bước 2/2: đang tìm máy GM và thiết lập đường truyền...");
+
+        dataConnection = peer.connect(PREFIX + code, {
           reliable: true,
           serialization: "json"
         });
