@@ -75,7 +75,9 @@ export function calculateBattlePreview(
   attacker,
   defender,
   terrainDef = 0,
-  terrainAvo = 0
+  terrainAvo = 0,
+  attackerTerrainDef = 0,
+  attackerTerrainAvo = 0
 ) {
   const triA = getTriangleBonus(
     attacker.weapon,
@@ -132,7 +134,8 @@ export function calculateBattlePreview(
     defender.str +
     defender.weapon.mt +
     triD.dmg -
-    attacker.def
+    attacker.def -
+    attackerTerrainDef
   );
 
   const hitRawD =
@@ -143,7 +146,8 @@ export function calculateBattlePreview(
 
   const avoA =
     asA * 2 +
-    attacker.lck;
+    attacker.lck +
+    attackerTerrainAvo;
 
   const hitD = Math.max(
     0,

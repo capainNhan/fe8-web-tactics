@@ -6,12 +6,17 @@
  * Mọi kích thước giao diện trên map đi qua px() để tự co giãn theo.
  */
 
+import { ACTIVE_MAP } from "./data/maps/index.js";
+
 export const UI_SCALE = 2;
 
 export const px = n => n * UI_SCALE;
 
-export const TILE = px(48);
-export const GRID = 8;
+// Kích thước khung game cố định; TILE tự co theo kích thước bản đồ
+// (bản đồ 8x8 -> ô 96px, 12x12 -> ô 64px). Xem data/maps/index.js.
+export const GAME_WIDTH = px(384);
+export const GAME_HEIGHT = px(384);
 
-export const GAME_WIDTH = TILE * GRID;
-export const GAME_HEIGHT = TILE * GRID;
+export const GRID = ACTIVE_MAP.width;
+
+export const TILE = GAME_WIDTH / GRID;
