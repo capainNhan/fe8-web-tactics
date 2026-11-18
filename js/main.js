@@ -6,6 +6,7 @@ import {
 import { BootScene } from "./scenes/BootScene.js";
 import { MapScene } from "./scenes/MapScene.js";
 import { BattleScene } from "./scenes/BattleScene.js";
+import { mountMusicToggle } from "./systems/ui/MusicToggle.js";
 
 const game = new Phaser.Game({
   type: Phaser.AUTO,
@@ -29,3 +30,5 @@ const game = new Phaser.Game({
 });
 
 window.fe8Game = game;
+
+mountMusicToggle(document.getElementById("game-container").parentElement);

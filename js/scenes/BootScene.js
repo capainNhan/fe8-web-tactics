@@ -7,6 +7,7 @@ import {
   queueImages
 } from "../systems/sprites/SpriteLoader.js";
 import { log } from "../systems/GameLog.js";
+import { preloadMusic } from "../systems/audio/index.js";
 
 /**
  * BOOT SCENE
@@ -25,6 +26,9 @@ export class BootScene extends Phaser.Scene {
     );
 
     queueSheets(this, BATTLE_SPRITE_IDS);
+
+    // Tải ngầm nhạc để vào trận không bị trễ (không chặn boot).
+    preloadMusic();
   }
 
   create() {

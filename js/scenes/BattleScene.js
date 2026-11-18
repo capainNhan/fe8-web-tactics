@@ -2,6 +2,7 @@ import { SpriteManager } from "../systems/sprites/SpriteManager.js";
 import { getBattleSpriteId } from "../data/battleSprites.js";
 import { UI_SCALE } from "../config.js";
 import { log as gameLog } from "../systems/GameLog.js";
+import { attachBattleMusic } from "../systems/audio/index.js";
 
 // Vị trí đứng của hai bên và mặt đất trên màn hình trận đánh.
 const LEFT_X = 80;
@@ -39,6 +40,9 @@ export class BattleScene extends Phaser.Scene {
 
   create() {
     this.sprites = new SpriteManager(this);
+
+    // Nhạc battle: module riêng, tự dừng khi scene đóng (systems/audio/).
+    attachBattleMusic(this, this.battleData);
 
     this.runBattle();
   }
