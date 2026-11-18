@@ -26,9 +26,9 @@ export const WEAPON_TRIANGLE = {
  * FE8 2RN:
  * Hit thực tế được tính bằng trung bình hai RN.
  */
-export function roll2RN(displayHit) {
-  const rn1 = Math.floor(Math.random() * 100);
-  const rn2 = Math.floor(Math.random() * 100);
+export function roll2RN(displayHit, rng = Math.random) {
+  const rn1 = Math.floor(rng() * 100);
+  const rn2 = Math.floor(rng() * 100);
 
   return (rn1 + rn2) / 2 < displayHit;
 }
@@ -194,7 +194,8 @@ export function calculateBattlePreview(
 export function resolveStrike(
   attacker,
   defender,
-  stats
+  stats,
+  rng = Math.random
 ) {
   if (
     !attacker ||
@@ -213,7 +214,7 @@ export function resolveStrike(
     };
   }
 
-  const hit = roll2RN(stats.hit);
+  const hit = roll2RN(stats.hit, rng);
 
   if (!hit) {
     return {
@@ -225,7 +226,7 @@ export function resolveStrike(
   }
 
   const crit =
-    Math.random() * 100 < stats.crit;
+    rng() * 100 < stats.crit;
 
   const damage = crit
     ? stats.dmg * 3
