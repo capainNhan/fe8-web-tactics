@@ -1,7 +1,3 @@
-import {
-  calculateBattlePreview,
-  resolveStrike
-} from "../fe8Logic.js";
 import { SpriteManager } from "../systems/sprites/SpriteManager.js";
 import { getBattleSpriteId } from "../data/battleSprites.js";
 import { UI_SCALE } from "../config.js";
@@ -15,7 +11,8 @@ const GROUND_Y = 316;
 /**
  * BATTLE SCENE
  * Màn hình giao chiến (cutscene): chỉ lo hiển thị và animation trận đấu.
- * Được MapScene mở bằng scene.launch("BattleScene", { attacker, defender, onComplete }).
+ * Được MapScene mở bằng scene.launch("BattleScene", { attacker, defender, strikes, before, onComplete }).
+ * Diễn biến (strikes) đã được luật chơi tính sẵn; scene này chỉ phát lại, KHÔNG tung xúc xắc.
  * Khi xong, scene tự đóng và gọi onComplete để MapScene tiếp tục.
  *
  * Sprite của mỗi bên lấy từ spritesheet theo unit.battleSprite
@@ -56,7 +53,14 @@ export class BattleScene extends Phaser.Scene {
 
       this.createBattleScreen();
 
-      await this.playBattle(attacker, defender);
+      // Đơn vị thật đã mang HP cuối trận; bản sao này giữ HP lúc bắt đầu
+      // để thanh HP giảm dần theo từng đòn trong animation.
+      const { before } = this.battleData;
+
+      const atk = { ...attacker, hp: before.attackerHp };
+      const def = { ...defender, hp: before.defenderHp };
+
+      await this.playBattle(atk, def);
 
     } catch (error) {
       console.error("Battle Runtime error:", error);
@@ -455,74 +459,30 @@ export class BattleScene extends Phaser.Scene {
 
     await this.wait(350);
 
-    // Cộng phòng thủ / né tránh theo địa hình mỗi bên đang đứng (nếu có).
-    const terrain = this.battleData.terrain;
+    // Phát lại từng đòn đã được luật chơi tính sẵn.
+    const fighters = {
+      [atk.id]: { unit: atk, sprite: this.attackerSprite, set: atkSet },
+      [def.id]: { unit: def, sprite: this.defenderSprite, set: defSet }
+    };
 
-    const pv = calculateBattlePreview(
-      atk,
-      def,
-      terrain?.defender?.def ?? 0,
-      terrain?.defender?.avo ?? 0,
-      terrain?.attacker?.def ?? 0,
-      terrain?.attacker?.avo ?? 0
-    );
+    for (const strike of this.battleData.strikes) {
+      const from = fighters[strike.attackerId];
+      const to = fighters[strike.defenderId];
 
-    // 1. Bên chủ động tấn công trước.
-    await this.performStrike(
-      atk,
-      def,
-      pv.attacker,
-      this.attackerSprite,
-      this.defenderSprite,
-      atkSet
-    );
-
-    // 2. Đối thủ phản công nếu cả hai còn sống.
-    if (
-      def.hp > 0 &&
-      atk.hp > 0 &&
-      def.weapon
-    ) {
-      await this.performStrike(
-        def,
-        atk,
-        pv.defender,
-        this.defenderSprite,
-        this.attackerSprite,
-        defSet
-      );
-    }
-
-    // 3. Đánh bồi.
-    if (atk.hp > 0 && def.hp > 0) {
-      if (pv.attacker.double) {
+      if (strike.kind === "double") {
         this.battleMessage.setText(
-          `${atk.name} ĐÁNH BỒI!`
-        );
-
-        await this.performStrike(
-          atk,
-          def,
-          pv.attacker,
-          this.attackerSprite,
-          this.defenderSprite,
-          atkSet
-        );
-
-      } else if (pv.defender.double) {
-        this.battleMessage.setText(
-          `${def.name} ĐÁNH BỒI!`
-        );
-
-        await this.performStrike(
-          def,
-          atk,
-          pv.defender,
-          this.defenderSprite,
-          this.attackerSprite,
-          defSet
+          `${from.unit.name} ĐÁNH BỒI!`
         );
       }
+
+      await this.performStrike(
+        from.unit,
+        to.unit,
+        strike,
+        from.sprite,
+        to.sprite,
+        from.set
+      );
     }
 
     this.battleMessage.setText(
@@ -556,11 +516,8 @@ export class BattleScene extends Phaser.Scene {
     const targetX =
       defenderStartX + (isLeft ? -set.reach : set.reach);
 
-    const result = resolveStrike(
-      { ...atk },
-      { ...def },
-      stats
-    );
+    // `stats` là đòn đã tính sẵn: { hit, crit, damage, ... }.
+    const result = stats;
 
     try {
       await this.performAnimatedStrike(

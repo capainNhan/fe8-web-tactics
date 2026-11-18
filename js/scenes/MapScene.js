@@ -3,7 +3,8 @@ import { TILE } from "../config.js";
 import { createUnits } from "../data/units.js";
 import { ACTIVE_MAP } from "../data/maps/index.js";
 import { TerrainMap } from "../systems/map/TerrainMap.js";
-import { TurnManager } from "../systems/TurnManager.js";
+import { GameState } from "../core/GameState.js";
+import { applyCommand } from "../core/Commands.js";
 import { MapRenderer } from "../systems/map/MapRenderer.js";
 import {
   inBounds,
@@ -33,10 +34,15 @@ export class MapScene extends Phaser.Scene {
 
   create() {
     this.terrainMap = new TerrainMap(ACTIVE_MAP);
-    this.units = createUnits(ACTIVE_MAP.spawns);
 
-    this.turn = new TurnManager();
-    this.turn.resetUnits(this.units);
+    // Trạng thái trận nằm trong GameState; mọi thay đổi đi qua lệnh (core/Commands.js).
+    this.state = new GameState({
+      units: createUnits(ACTIVE_MAP.spawns),
+      terrainMap: this.terrainMap
+    });
+
+    this.units = this.state.units;
+    this.turn = this.state.turn;
 
     this.selectedUnit = null;
     this.moveTiles = [];
@@ -74,6 +80,11 @@ export class MapScene extends Phaser.Scene {
   // ==========================================
   // HELPERS
   // ==========================================
+
+  // Gửi một lệnh tới luật chơi. Hiện chỉ có phe người chơi điều khiển bằng tay.
+  dispatch(command, team = "player") {
+    return applyCommand(this.state, { ...command, actor: { team } });
+  }
 
   redraw() {
     this.mapView.drawGrid(this.moveTiles);
@@ -248,7 +259,15 @@ export class MapScene extends Phaser.Scene {
         break;
 
       case "wait":
-        this.turn.markActed(unit);
+        {
+          const result = this.dispatch({ type: "wait", unitId: unit.id });
+
+          if (!result.ok) {
+            log(result.error);
+            return;
+          }
+        }
+
         this.clearSelection();
         this.refreshTurnUI();
 
@@ -276,9 +295,17 @@ export class MapScene extends Phaser.Scene {
       return;
     }
 
-    this.turn.markMoved(unit);
-    unit.x = gx;
-    unit.y = gy;
+    const result = this.dispatch({
+      type: "move",
+      unitId: unit.id,
+      x: gx,
+      y: gy
+    });
+
+    if (!result.ok) {
+      log(result.error);
+      return;
+    }
 
     this.moveTiles = [];
     this.actionMode = null;
@@ -310,17 +337,28 @@ export class MapScene extends Phaser.Scene {
       return;
     }
 
-    this.turn.markActed(unit);
+    const result = this.dispatch({
+      type: "attack",
+      unitId: unit.id,
+      targetId: target.id
+    });
+
+    if (!result.ok) {
+      log(result.error);
+      return;
+    }
+
     this.clearSelection();
 
-    this.startBattle(unit, target);
+    this.startBattle(unit, target, result.events[0]);
   }
 
   // ==========================================
   // BATTLE (mở BattleScene)
   // ==========================================
 
-  startBattle(attacker, defender) {
+  // battle: sự kiện "battle" từ luật chơi (danh sách đòn đã tính sẵn).
+  startBattle(attacker, defender, battle) {
     this.battleInProgress = true;
     this.refreshTurnUI();
 
@@ -329,10 +367,8 @@ export class MapScene extends Phaser.Scene {
     this.scene.launch("BattleScene", {
       attacker,
       defender,
-      terrain: {
-        attacker: this.terrainMap.bonusAt(attacker.x, attacker.y),
-        defender: this.terrainMap.bonusAt(defender.x, defender.y)
-      },
+      strikes: battle.strikes,
+      before: battle.before,
       onComplete: () =>
         this.onBattleFinished(attacker, defender)
     });
@@ -370,14 +406,19 @@ export class MapScene extends Phaser.Scene {
     this.refreshTurnUI();
 
     try {
-      this.turn.beginEnemyPhase();
+      const toEnemy = this.dispatch({ type: "endTurn" });
+
+      if (!toEnemy.ok) throw new Error(toEnemy.error);
+
       this.refreshTurnUI();
 
       log("=== LƯỢT ĐỊCH BẮT ĐẦU ===");
 
       await this.runEnemyPhase();
 
-      this.turn.beginPlayerPhase(this.units);
+      const toPlayer = this.dispatch({ type: "endTurn" }, "enemy");
+
+      if (!toPlayer.ok) throw new Error(toPlayer.error);
 
       log(`=== LƯỢT ${this.turn.turn} - NGƯỜI CHƠI ===`);
 
