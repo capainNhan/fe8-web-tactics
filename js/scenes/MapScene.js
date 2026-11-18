@@ -1,6 +1,8 @@
 
 import { TILE } from "../config.js";
 import { createUnits } from "../data/units.js";
+import { ACTIVE_MAP } from "../data/maps/index.js";
+import { TerrainMap } from "../systems/map/TerrainMap.js";
 import { TurnManager } from "../systems/TurnManager.js";
 import { MapRenderer } from "../systems/map/MapRenderer.js";
 import {
@@ -11,6 +13,7 @@ import {
 } from "../systems/map/MapGrid.js";
 import { UnitActionMenu } from "../systems/ui/UnitActionMenu.js";
 import { TurnUI } from "../systems/ui/TurnUI.js";
+import { TileInfoPanel } from "../systems/ui/TileInfoPanel.js";
 import { log } from "../systems/GameLog.js";
 
 /**
@@ -29,7 +32,8 @@ export class MapScene extends Phaser.Scene {
   // ==========================================
 
   create() {
-    this.units = createUnits();
+    this.terrainMap = new TerrainMap(ACTIVE_MAP);
+    this.units = createUnits(ACTIVE_MAP.spawns);
 
     this.turn = new TurnManager();
     this.turn.resetUnits(this.units);
@@ -41,7 +45,7 @@ export class MapScene extends Phaser.Scene {
     this.battleInProgress = false;
     this.turnTransitioning = false;
 
-    this.mapView = new MapRenderer(this);
+    this.mapView = new MapRenderer(this, this.terrainMap);
     this.mapView.drawGrid();
     this.mapView.createUnitTokens(this.units);
 
@@ -49,6 +53,8 @@ export class MapScene extends Phaser.Scene {
       this,
       () => this.endPlayerTurn()
     );
+
+    this.tileInfo = new TileInfoPanel(this, this.terrainMap);
 
     this.actionMenu = new UnitActionMenu(
       this,
@@ -61,6 +67,7 @@ export class MapScene extends Phaser.Scene {
     );
 
     this.refreshTurnUI();
+    log(`Bản đồ: ${ACTIVE_MAP.name}.`);
     log("Lượt 1 - Phe người chơi.");
   }
 
@@ -129,6 +136,8 @@ export class MapScene extends Phaser.Scene {
   }
 
   handleTileClick(gx, gy) {
+    this.tileInfo.show(gx, gy, this.selectedUnit?.moveType);
+
     const target = unitAt(this.units, gx, gy);
 
     // Chọn đơn vị người chơi.
@@ -223,7 +232,7 @@ export class MapScene extends Phaser.Scene {
 
         this.actionMenu.hide();
         this.actionMode = "move";
-        this.moveTiles = getMoveTiles(unit, this.units);
+        this.moveTiles = getMoveTiles(unit, this.units, this.terrainMap);
         this.redraw();
 
         log("Chọn ô muốn di chuyển.");
@@ -320,6 +329,10 @@ export class MapScene extends Phaser.Scene {
     this.scene.launch("BattleScene", {
       attacker,
       defender,
+      terrain: {
+        attacker: this.terrainMap.bonusAt(attacker.x, attacker.y),
+        defender: this.terrainMap.bonusAt(defender.x, defender.y)
+      },
       onComplete: () =>
         this.onBattleFinished(attacker, defender)
     });

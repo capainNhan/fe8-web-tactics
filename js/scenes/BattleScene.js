@@ -455,7 +455,17 @@ export class BattleScene extends Phaser.Scene {
 
     await this.wait(350);
 
-    const pv = calculateBattlePreview(atk, def);
+    // Cộng phòng thủ / né tránh theo địa hình mỗi bên đang đứng (nếu có).
+    const terrain = this.battleData.terrain;
+
+    const pv = calculateBattlePreview(
+      atk,
+      def,
+      terrain?.defender?.def ?? 0,
+      terrain?.defender?.avo ?? 0,
+      terrain?.attacker?.def ?? 0,
+      terrain?.attacker?.avo ?? 0
+    );
 
     // 1. Bên chủ động tấn công trước.
     await this.performStrike(
