@@ -185,9 +185,11 @@ export const unitsData = [
  * Tạo bản sao dữ liệu đơn vị cho một ván chơi mới.
  * unitsData giữ nguyên là dữ liệu gốc, không bị ván chơi sửa.
  */
-export function createUnits() {
+// spawns: { id: { x, y } } lấy từ bản đồ, ghi đè vị trí mặc định.
+export function createUnits(spawns = {}) {
   return unitsData.map(unit => ({
     ...unit,
+    ...(spawns[unit.id] ?? {}),
     weapon: { ...unit.weapon },
     hasMoved: false,
     hasActed: false
