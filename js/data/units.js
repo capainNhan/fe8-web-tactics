@@ -124,7 +124,7 @@ export const unitsData = [
     id: "e2",
     name: "Kỵ Binh Địch Nhị",
     team: "enemy",
-    battleSprite: "Char8",
+    battleSprite: "Char8R",
     x: 5,
     y: 2,
 
@@ -154,7 +154,7 @@ export const unitsData = [
     id: "e3",
     name: "Kỵ Binh Địch Tam",
     team: "enemy",
-    battleSprite: "Char8",
+    battleSprite: "Char8R",
     x: 5,
     y: 4,
 
