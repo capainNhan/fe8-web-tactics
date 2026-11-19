@@ -28,7 +28,7 @@ export class MapRenderer {
     this.tokens = new Map();
   }
 
-  drawGrid(highlightTiles = []) {
+  drawGrid(highlightTiles = [], attackTiles = []) {
     const g = this.graphics;
 
     g.clear();
@@ -48,6 +48,15 @@ export class MapRenderer {
       g.fillRect(t.x * TILE, t.y * TILE, TILE, TILE);
 
       g.lineStyle(px(1), 0xe0f2fe, 0.8);
+      g.strokeRect(t.x * TILE, t.y * TILE, TILE, TILE);
+    });
+
+    // Ô có kẻ địch trong tầm đánh.
+    attackTiles.forEach(t => {
+      g.fillStyle(0xef4444, 0.5);
+      g.fillRect(t.x * TILE, t.y * TILE, TILE, TILE);
+
+      g.lineStyle(px(2), 0xfecaca, 0.95);
       g.strokeRect(t.x * TILE, t.y * TILE, TILE, TILE);
     });
   }
@@ -89,7 +98,15 @@ export class MapRenderer {
 
     container.add([hpBackground, hpBar]);
 
-    this.tokens.set(unit.id, { container, hpBar });
+    this.tokens.set(unit.id, {
+      container,
+      hpBar,
+      body,
+      footY,
+      dying: false
+    });
+
+    this.syncUnit(unit);
   }
 
   /**
@@ -166,6 +183,10 @@ export class MapRenderer {
         .setScale((TILE * 0.95) / box.bottom)
         .setFlipX(flip);
 
+      // Để lật hướng khi đi bộ (origin phải đổi theo hướng lật).
+      sprite.setData("face", { ox, oy: box.bottom / set.cellH, baseFlip: flip });
+      sprite.setData("set", set);
+
       return sprite;
 
     } catch (error) {
@@ -187,10 +208,36 @@ export class MapRenderer {
     }
   }
 
+  // Quay đầu sprite theo hướng đi (dx > 0: sang phải, dx < 0: sang trái).
+  faceToward(token, dx) {
+    const body = token.body;
+    const face = body.getData?.("face");
+    const set = body.getData?.("set");
+
+    if (!face || dx === 0) return;
+
+    const flip = dx > 0 ? set.flipFor("left") : set.flipFor("right");
+
+    body
+      .setOrigin(flip ? 1 - face.ox : face.ox, face.oy)
+      .setFlipX(flip);
+  }
+
+  faceDefault(token) {
+    const face = token.body.getData?.("face");
+
+    if (!face) return;
+
+    token.body
+      .setOrigin(face.baseFlip ? 1 - face.ox : face.ox, face.oy)
+      .setFlipX(face.baseFlip);
+  }
+
   /**
-   * Di chuyển token tới vị trí (x, y) hiện tại của unit.
+   * Cho token đi bộ từng ô theo `path` (mảng { x, y }) tới vị trí hiện tại của unit.
+   * Không có path thì đi thẳng một bước.
    */
-  moveToken(unit, onComplete) {
+  moveToken(unit, path, onComplete) {
     const token = this.tokens.get(unit.id);
 
     if (!token) {
@@ -198,30 +245,88 @@ export class MapRenderer {
       return;
     }
 
-    this.scene.tweens.add({
-      targets: token.container,
-      x: unit.x * TILE + TILE / 2,
-      y: unit.y * TILE + TILE / 2,
-      duration: 200,
-      ease: "Power2",
-      onComplete: () => onComplete?.()
-    });
+    const steps = path?.length ? path : [{ x: unit.x, y: unit.y }];
+    const canBob = token.body.type === "Sprite";
+
+    const walk = index => {
+      if (index >= steps.length) {
+        this.faceDefault(token);
+        onComplete?.();
+        return;
+      }
+
+      const target = steps[index];
+      const x = target.x * TILE + TILE / 2;
+      const y = target.y * TILE + TILE / 2;
+
+      this.faceToward(token, x - token.container.x);
+
+      // Nhấp nhô nhẹ mỗi bước cho có cảm giác phi nước kiệu.
+      if (canBob) {
+        this.scene.tweens.add({
+          targets: token.body,
+          y: token.footY - u(5),
+          duration: 65,
+          yoyo: true
+        });
+      }
+
+      this.scene.tweens.add({
+        targets: token.container,
+        x,
+        y,
+        duration: 130,
+        ease: "Linear",
+        onComplete: () => walk(index + 1)
+      });
+    };
+
+    walk(0);
   }
 
   /**
-   * Cập nhật token theo dữ liệu đơn vị (HP, còn sống hay không).
+   * Cập nhật token theo dữ liệu đơn vị: thanh HP, xám đi khi đã xong lượt,
+   * mờ dần khi gục ngã.
    */
   syncUnit(unit) {
     const token = this.tokens.get(unit.id);
 
     if (!token) return;
 
-    token.container.setVisible(unit.hp > 0);
+    const ratio = Math.max(0, unit.hp / unit.maxHp);
 
-    token.hpBar.width = Math.max(
-      0,
-      u(32) * (unit.hp / unit.maxHp)
+    token.hpBar.width = u(32) * ratio;
+    token.hpBar.setFillStyle(
+      ratio > 0.5 ? 0x22c55e : ratio > 0.25 ? 0xeab308 : 0xef4444
     );
+
+    if (token.body.setTint) {
+      if (unit.hp > 0 && unit.hasActed) {
+        token.body.setTint(0x808080);
+      } else {
+        token.body.clearTint();
+      }
+    }
+
+    if (unit.hp <= 0) {
+      if (!token.dying && token.container.visible) {
+        token.dying = true;
+
+        this.scene.tweens.add({
+          targets: token.container,
+          alpha: 0,
+          duration: 600,
+          onComplete: () => token.container.setVisible(false)
+        });
+      } else if (!token.container.visible) {
+        token.container.setAlpha(0);
+      }
+
+      return;
+    }
+
+    token.dying = false;
+    token.container.setVisible(true).setAlpha(1);
   }
 
   syncAll(units) {
