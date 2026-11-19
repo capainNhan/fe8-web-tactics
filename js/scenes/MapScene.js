@@ -5,6 +5,8 @@ import { ACTIVE_MAP } from "../data/maps/index.js";
 import { TerrainMap } from "../systems/map/TerrainMap.js";
 import { GameState } from "../core/GameState.js";
 import { applyCommand } from "../core/Commands.js";
+import { getForecast } from "../core/Forecast.js";
+import { planNextAction } from "../core/EnemyAI.js";
 import { MapRenderer } from "../systems/map/MapRenderer.js";
 import {
   inBounds,
@@ -15,12 +17,16 @@ import {
 import { UnitActionMenu } from "../systems/ui/UnitActionMenu.js";
 import { TurnUI } from "../systems/ui/TurnUI.js";
 import { TileInfoPanel } from "../systems/ui/TileInfoPanel.js";
+import { TurnBanner } from "../systems/ui/TurnBanner.js";
+import { GameOverPanel } from "../systems/ui/GameOverPanel.js";
+import { BattleForecastPanel } from "../systems/ui/BattleForecastPanel.js";
 import { log } from "../systems/GameLog.js";
 
 /**
  * MAP SCENE
- * Bàn cờ chiến thuật: chọn đơn vị, menu hành động,
- * di chuyển, chọn mục tiêu, chuyển lượt.
+ * Bàn cờ chiến thuật: chọn đơn vị, menu hành động, di chuyển, chọn mục tiêu,
+ * xem dự đoán trận đánh, chuyển lượt, lượt địch (AI), kết thúc ván.
+ * Luật chơi nằm trong js/core; scene này chỉ gửi lệnh và phát hiệu ứng.
  * Khi hai bên giao chiến, MapScene mở BattleScene và chờ kết quả.
  */
 export class MapScene extends Phaser.Scene {
@@ -46,6 +52,7 @@ export class MapScene extends Phaser.Scene {
 
     this.selectedUnit = null;
     this.moveTiles = [];
+    this.attackTiles = [];
     this.actionMode = null; // null | "move" | "attack"
 
     this.battleInProgress = false;
@@ -61,6 +68,12 @@ export class MapScene extends Phaser.Scene {
     );
 
     this.tileInfo = new TileInfoPanel(this, this.terrainMap);
+    this.banner = new TurnBanner(this);
+    this.forecastPanel = new BattleForecastPanel(this);
+    this.gameOverPanel = new GameOverPanel(
+      this,
+      () => this.scene.restart()
+    );
 
     this.actionMenu = new UnitActionMenu(
       this,
@@ -81,20 +94,22 @@ export class MapScene extends Phaser.Scene {
   // HELPERS
   // ==========================================
 
-  // Gửi một lệnh tới luật chơi. Hiện chỉ có phe người chơi điều khiển bằng tay.
+  // Gửi một lệnh tới luật chơi.
   dispatch(command, team = "player") {
     return applyCommand(this.state, { ...command, actor: { team } });
   }
 
   redraw() {
-    this.mapView.drawGrid(this.moveTiles);
+    this.mapView.drawGrid(this.moveTiles, this.attackTiles);
   }
 
   clearSelection() {
     this.actionMenu.hide();
+    this.forecastPanel.hide();
 
     this.selectedUnit = null;
     this.moveTiles = [];
+    this.attackTiles = [];
     this.actionMode = null;
 
     this.redraw();
@@ -107,7 +122,8 @@ export class MapScene extends Phaser.Scene {
       canEndTurn:
         this.turn.isPlayerPhase() &&
         !this.battleInProgress &&
-        !this.turnTransitioning
+        !this.turnTransitioning &&
+        !this.state.outcome
     });
   }
 
@@ -117,12 +133,36 @@ export class MapScene extends Phaser.Scene {
     });
   }
 
+  // Hiện màn kết quả nếu ván đã kết thúc. Trả về true nếu đã kết thúc.
+  checkGameOver() {
+    const outcome = this.state.outcome;
+
+    if (!outcome) return false;
+
+    this.clearSelection();
+    this.refreshTurnUI();
+
+    log(
+      outcome.winner === "player"
+        ? "=== CHIẾN THẮNG ==="
+        : "=== THẤT BẠI ==="
+    );
+
+    this.gameOverPanel.show(outcome);
+
+    return true;
+  }
+
   // ==========================================
   // INPUT
   // ==========================================
 
   onPointerDown(pointer) {
-    if (this.battleInProgress || this.turnTransitioning) {
+    if (
+      this.battleInProgress ||
+      this.turnTransitioning ||
+      this.state.outcome
+    ) {
       return;
     }
 
@@ -131,6 +171,10 @@ export class MapScene extends Phaser.Scene {
     }
 
     if (this.actionMenu.contains(pointer.x, pointer.y)) {
+      return;
+    }
+
+    if (this.forecastPanel.contains(pointer.x, pointer.y)) {
       return;
     }
 
@@ -153,6 +197,7 @@ export class MapScene extends Phaser.Scene {
 
     // Chọn đơn vị người chơi.
     if (target && target.team === "player") {
+      this.forecastPanel.hide();
       this.selectUnit(target);
       return;
     }
@@ -167,7 +212,7 @@ export class MapScene extends Phaser.Scene {
     }
 
     if (this.actionMode === "attack") {
-      this.tryAttack(unit, target);
+      this.previewAttack(unit, target);
     } else if (this.actionMode === "move") {
       this.tryMove(unit, gx, gy, target);
     }
@@ -182,6 +227,7 @@ export class MapScene extends Phaser.Scene {
     this.selectedUnit = unit;
     this.actionMode = null;
     this.moveTiles = [];
+    this.attackTiles = [];
 
     this.redraw();
     this.showUnitActionMenu(unit);
@@ -212,7 +258,9 @@ export class MapScene extends Phaser.Scene {
       {
         id: "attack",
         label: "Tấn công",
-        enabled: this.turn.canAct(unit)
+        enabled:
+          this.turn.canAct(unit) &&
+          getAttackTargets(unit, this.units).length > 0
       },
       {
         id: "wait",
@@ -244,35 +292,45 @@ export class MapScene extends Phaser.Scene {
         this.actionMenu.hide();
         this.actionMode = "move";
         this.moveTiles = getMoveTiles(unit, this.units, this.terrainMap);
+        this.attackTiles = [];
         this.redraw();
 
         log("Chọn ô muốn di chuyển.");
         break;
 
-      case "attack":
+      case "attack": {
+        const targets = getAttackTargets(unit, this.units);
+
+        if (!targets.length) {
+          log("Không có kẻ địch trong tầm đánh.");
+          return;
+        }
+
         this.actionMenu.hide();
         this.actionMode = "attack";
         this.moveTiles = [];
+        this.attackTiles = targets.map(t => ({ x: t.x, y: t.y }));
         this.redraw();
 
-        log("Chọn kẻ địch liền kề để tấn công.");
+        log("Chọn kẻ địch (ô đỏ) để xem dự đoán và tấn công.");
         break;
+      }
 
-      case "wait":
-        {
-          const result = this.dispatch({ type: "wait", unitId: unit.id });
+      case "wait": {
+        const result = this.dispatch({ type: "wait", unitId: unit.id });
 
-          if (!result.ok) {
-            log(result.error);
-            return;
-          }
+        if (!result.ok) {
+          log(result.error);
+          return;
         }
 
+        this.mapView.syncUnit(unit);
         this.clearSelection();
         this.refreshTurnUI();
 
         log(unit.name + " đã đợi.");
         break;
+      }
     }
   }
 
@@ -311,7 +369,7 @@ export class MapScene extends Phaser.Scene {
     this.actionMode = null;
     this.redraw();
 
-    this.mapView.moveToken(unit, () => {
+    this.mapView.moveToken(unit, result.events[0].path, () => {
       if (this.selectedUnit === unit && !unit.hasActed) {
         log(
           unit.name +
@@ -323,20 +381,32 @@ export class MapScene extends Phaser.Scene {
     });
   }
 
-  tryAttack(unit, target) {
+  // Bấm vào kẻ địch ở chế độ tấn công: hiện bảng dự đoán, chờ xác nhận.
+  previewAttack(unit, target) {
     if (!target || target.team !== "enemy") {
-      log("Hãy chọn một kẻ địch.");
+      log("Hãy chọn một kẻ địch (ô đỏ).");
       return;
     }
 
-    const inRange = getAttackTargets(unit, this.units)
-      .includes(target);
-
-    if (!inRange) {
+    if (!getAttackTargets(unit, this.units).includes(target)) {
       log("Kẻ địch nằm ngoài tầm tấn công.");
       return;
     }
 
+    this.forecastPanel.show(
+      getForecast(this.state, unit, target),
+      target.y,
+      {
+        onConfirm: () => {
+          this.forecastPanel.hide();
+          this.executeAttack(unit, target);
+        },
+        onCancel: () => this.forecastPanel.hide()
+      }
+    );
+  }
+
+  async executeAttack(unit, target) {
     const result = this.dispatch({
       type: "attack",
       unitId: unit.id,
@@ -350,7 +420,11 @@ export class MapScene extends Phaser.Scene {
 
     this.clearSelection();
 
-    this.startBattle(unit, target, result.events[0]);
+    const battle = result.events.find(e => e.type === "battle");
+
+    await this.startBattle(unit, target, battle);
+
+    this.checkGameOver();
   }
 
   // ==========================================
@@ -358,19 +432,24 @@ export class MapScene extends Phaser.Scene {
   // ==========================================
 
   // battle: sự kiện "battle" từ luật chơi (danh sách đòn đã tính sẵn).
+  // Trả về Promise, xong khi trận đánh kết thúc.
   startBattle(attacker, defender, battle) {
     this.battleInProgress = true;
     this.refreshTurnUI();
 
     this.scene.pause();
 
-    this.scene.launch("BattleScene", {
-      attacker,
-      defender,
-      strikes: battle.strikes,
-      before: battle.before,
-      onComplete: () =>
-        this.onBattleFinished(attacker, defender)
+    return new Promise(resolve => {
+      this.scene.launch("BattleScene", {
+        attacker,
+        defender,
+        strikes: battle.strikes,
+        before: battle.before,
+        onComplete: () => {
+          this.onBattleFinished(attacker, defender);
+          resolve();
+        }
+      });
     });
   }
 
@@ -396,7 +475,8 @@ export class MapScene extends Phaser.Scene {
     if (
       !this.turn.isPlayerPhase() ||
       this.battleInProgress ||
-      this.turnTransitioning
+      this.turnTransitioning ||
+      this.state.outcome
     ) {
       return;
     }
@@ -410,17 +490,29 @@ export class MapScene extends Phaser.Scene {
 
       if (!toEnemy.ok) throw new Error(toEnemy.error);
 
+      this.mapView.syncAll(this.units);
       this.refreshTurnUI();
 
       log("=== LƯỢT ĐỊCH BẮT ĐẦU ===");
 
+      await this.banner.show("LƯỢT ĐỊCH", 0xb91c1c);
       await this.runEnemyPhase();
+
+      // Ván có thể đã kết thúc ngay trong lượt địch.
+      if (this.state.outcome) return;
 
       const toPlayer = this.dispatch({ type: "endTurn" }, "enemy");
 
       if (!toPlayer.ok) throw new Error(toPlayer.error);
 
+      this.mapView.syncAll(this.units);
+
       log(`=== LƯỢT ${this.turn.turn} - NGƯỜI CHƠI ===`);
+
+      await this.banner.show(
+        `LƯỢT ${this.turn.turn} - NGƯỜI CHƠI`,
+        0x1d4ed8
+      );
 
     } catch (error) {
       console.error("Turn transition error:", error);
@@ -434,12 +526,52 @@ export class MapScene extends Phaser.Scene {
 
       this.clearSelection();
       this.refreshTurnUI();
+
+      this.checkGameOver();
     }
   }
 
+  /**
+   * Lượt địch do AI (core/EnemyAI.js) chơi: hỏi lệnh kế tiếp, thực thi, phát hiệu ứng.
+   */
   async runEnemyPhase() {
-    // AI địch sẽ được tích hợp ở đây.
-    await this.wait(700);
+    await this.wait(250);
+
+    let guard = 0;
+    let action;
+
+    while (
+      guard++ < 100 &&
+      (action = planNextAction(this.state, "enemy"))
+    ) {
+      const unit = this.state.unitById(action.unitId);
+      const result = this.dispatch(action, "enemy");
+
+      if (!result.ok) {
+        console.warn("AI gửi lệnh không hợp lệ:", action, result.error);
+        break;
+      }
+
+      const event = result.events[0];
+
+      if (event.type === "moved") {
+        await new Promise(resolve =>
+          this.mapView.moveToken(unit, event.path, resolve)
+        );
+
+        await this.wait(120);
+
+      } else if (event.type === "battle") {
+        const defender = this.state.unitById(event.defenderId);
+
+        await this.startBattle(unit, defender, event);
+
+      } else {
+        this.mapView.syncUnit(unit);
+      }
+
+      if (this.state.outcome) break;
+    }
 
     log("Phe địch đã hoàn thành lượt.");
   }
