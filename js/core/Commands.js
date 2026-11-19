@@ -1,5 +1,7 @@
 
 import { getMoveTiles, getAttackTargets } from "../systems/map/MapGrid.js";
+import { exploreReach, buildPath } from "../systems/map/Pathfinding.js";
+import { checkOutcome } from "./Objectives.js";
 import { resolveBattle } from "./BattleResolver.js";
 
 /**
@@ -19,10 +21,11 @@ import { resolveBattle } from "./BattleResolver.js";
  *   { type: "endTurn", actor }
  *
  * Các sự kiện trả về:
- *   moved        { unitId, from, to, cost }
+ *   moved        { unitId, from, to, cost, path }
  *   waited       { unitId }
  *   battle       { attackerId, defenderId, strikes, before, after, terrain }
  *   phaseChanged { phase, turn }
+ *   gameOver     { winner, reason }   (thêm vào cuối khi ván kết thúc)
  */
 
 const fail = error => ({ ok: false, error, events: [] });
@@ -54,6 +57,13 @@ const HANDLERS = {
 
     const from = { x: unit.x, y: unit.y };
 
+    // Lối đi từng ô, để giao diện cho nhân vật đi bộ thay vì dịch chuyển tức thời.
+    const path = buildPath(
+      exploreReach(unit, state.units, state.terrainMap),
+      cmd.x,
+      cmd.y
+    );
+
     state.turn.markMoved(unit);
     unit.x = cmd.x;
     unit.y = cmd.y;
@@ -63,7 +73,8 @@ const HANDLERS = {
       unitId: unit.id,
       from,
       to: { x: unit.x, y: unit.y },
-      cost: tile.cost
+      cost: tile.cost,
+      path
     }]);
   },
 
@@ -141,5 +152,18 @@ export function applyCommand(state, command, rng = Math.random) {
 
   if (!handler) return fail("Lệnh không hợp lệ.");
 
-  return handler(state, command, rng);
+  if (state.outcome) return fail("Ván đấu đã kết thúc.");
+
+  const result = handler(state, command, rng);
+
+  if (result.ok) {
+    const outcome = checkOutcome(state);
+
+    if (outcome) {
+      state.outcome = outcome;
+      result.events.push({ type: "gameOver", ...outcome });
+    }
+  }
+
+  return result;
 }

@@ -14,6 +14,9 @@ export class GameState {
 
     this.turn = new TurnManager();
     this.turn.resetUnits(this.units);
+
+    // null khi ván đang chơi, hoặc { winner, reason } khi đã kết thúc.
+    this.outcome = null;
   }
 
   unitById(id) {
@@ -28,6 +31,7 @@ export class GameState {
     return JSON.parse(JSON.stringify({
       turn: this.turn.turn,
       phase: this.turn.phase,
+      outcome: this.outcome,
       units: this.units
     }));
   }
@@ -37,6 +41,7 @@ export class GameState {
 
     this.turn.turn = data.turn;
     this.turn.phase = data.phase;
+    this.outcome = data.outcome ?? null;
     this.units.length = 0;
     this.units.push(...data.units);
   }
