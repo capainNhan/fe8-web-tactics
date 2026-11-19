@@ -27,3 +27,19 @@ Mỗi phần là một module riêng trong `js/systems/audio/`:
 ## Thêm loại nhạc khác (nhạc bản đồ, thắng/thua...)
 Tạo module mới cạnh `BattleMusic.js` (ví dụ `MapMusic.js`) dùng chung `musicPlayer`
 xuất từ `index.js`; không cần sửa các module còn lại.
+
+## Hiệu ứng âm thanh (SFX)
+
+| Việc cần làm | File |
+|---|---|
+| Thêm/sửa tiếng, gán file riêng, độ to | `js/data/sfx.js` |
+| Đòn nào (trúng / chí mạng / trượt) phát tiếng nào | `BATTLE_SFX` trong `js/data/sfx.js` + `js/systems/audio/BattleSfx.js` |
+| Phát một tiếng ngắn (file hoặc tự tạo) | `js/systems/audio/SfxPlayer.js` |
+| Tiếng tự tạo bằng WebAudio (chém, thịch, ngân kim loại) | `js/systems/audio/SynthSfx.js` |
+| AudioContext dùng chung với nhạc nền | `js/systems/audio/AudioContextHub.js` |
+
+Điểm móc vào game: `BattleScene.performAnimatedStrike()` gọi `playStrikeSfx(result)`
+đúng lúc va chạm. Nút bật/tắt "Âm thanh" tắt cả nhạc lẫn hiệu ứng.
+
+Thêm tiếng trượt: viết hàm mới trong `SYNTH_SFX`, khai báo `slash_miss` trong `SFX`,
+rồi đặt `miss: "slash_miss"` trong `BATTLE_SFX`.
