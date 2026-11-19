@@ -24,7 +24,7 @@ export function mountMusicToggle(parent = document.body) {
   slider.title = "Âm lượng nhạc";
 
   const refresh = () => {
-    button.textContent = musicSettings.muted ? "🔇 Nhạc: Tắt" : "🔊 Nhạc: Bật";
+    button.textContent = musicSettings.muted ? "🔇 Âm thanh: Tắt" : "🔊 Âm thanh: Bật";
     slider.value = String(Math.round(musicSettings.volume * 100));
   };
 

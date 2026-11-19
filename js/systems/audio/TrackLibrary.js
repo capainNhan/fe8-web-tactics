@@ -49,7 +49,9 @@ export class TrackLibrary {
       }
     }
 
-    console.warn(`[Music] Không tìm thấy file cho bài "${id}", dùng nhạc dự phòng.`);
+    if (track.files.length) {
+      console.warn(`[Music] Không tìm thấy file cho "${id}", dùng bản dự phòng.`);
+    }
 
     return null;
   }

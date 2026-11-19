@@ -100,6 +100,20 @@ export class MusicPlayer {
     }, fadeOut + 80);
   }
 
+  // Hạ nhạc tạm thời (để hiệu ứng nổi lên) rồi trả lại âm lượng cũ.
+  duck(level = 0.35, ms = 280) {
+    const entry = this.current;
+
+    if (!entry || level >= 1) return;
+
+    this.fadeTo(entry, this.settings.effectiveVolume * level, 20);
+
+    clearTimeout(this.duckTimer);
+    this.duckTimer = setTimeout(() => {
+      if (this.current === entry) this.fadeTo(entry, this.settings.effectiveVolume, 250);
+    }, ms);
+  }
+
   applyVolume() {
     if (this.current) {
       this.fadeTo(this.current, this.settings.effectiveVolume, 80);

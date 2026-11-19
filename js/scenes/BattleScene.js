@@ -2,7 +2,7 @@ import { SpriteManager } from "../systems/sprites/SpriteManager.js";
 import { getBattleSpriteId } from "../data/battleSprites.js";
 import { UI_SCALE } from "../config.js";
 import { log as gameLog } from "../systems/GameLog.js";
-import { attachBattleMusic } from "../systems/audio/index.js";
+import { attachBattleMusic, playStrikeSfx } from "../systems/audio/index.js";
 
 // Vị trí đứng của hai bên và mặt đất trên màn hình trận đánh.
 const LEFT_X = 80;
@@ -679,6 +679,9 @@ export class BattleScene extends Phaser.Scene {
     await this.wait(attack.impactMs + 20);
 
     let dodgeAnimation = Promise.resolve();
+
+    // Tiếng chém đúng khoảnh khắc va chạm (module systems/audio/BattleSfx.js).
+    playStrikeSfx(result);
 
     // HP chỉ được thay đổi một lần tại điểm va chạm.
     if (result.hit) {

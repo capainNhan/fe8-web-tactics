@@ -37,7 +37,11 @@ export const BATTLE_SFX = {
 // Tiếng cần tải sẵn khi mở game (chỉ có tác dụng với tiếng có files).
 export const PRELOAD_SFX = ["slash_hit", "slash_crit"];
 
+// Hạ nhạc nền xuống tạm thời khi có tiếng đòn đánh để tiếng chém nghe rõ.
+// level: nhạc còn bao nhiêu phần (0..1); ms: giữ trong bao lâu. level = 1 để tắt tính năng.
+export const MUSIC_DUCK = { level: 0.35, ms: 280 };
+
 // Độ to chung của hiệu ứng (0..1).
-export const SFX_MASTER_VOLUME = 0.8;
+export const SFX_MASTER_VOLUME = 1;
 
 export { DIR as SFX_DIR };
