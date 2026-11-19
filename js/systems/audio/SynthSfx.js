@@ -63,15 +63,30 @@ function ring(ctx, dest, time, freqs, peak, length) {
 }
 
 // Cú "thịch" trầm khi đòn trúng thân.
-function thump(ctx, dest, time, { peak, length, from, to }) {
+function thump(ctx, dest, time, { peak, length, from, to, wave = "sine" }) {
   const osc = ctx.createOscillator();
 
-  osc.type = "sine";
+  osc.type = wave;
   osc.frequency.setValueAtTime(from, time);
   osc.frequency.exponentialRampToValueAtTime(to, time + length);
   osc.connect(envelope(ctx, dest, time, peak, length));
   osc.start(time);
   osc.stop(time + length + 0.02);
+}
+
+// Tiếng đòn đập vào thân người: nhiễu bị lọc trầm, tắt nhanh -> nghe đục, "bịch", không ngân.
+function body(ctx, dest, time, { peak, length, cutoff }) {
+  const source = ctx.createBufferSource();
+  const filter = ctx.createBiquadFilter();
+
+  source.buffer = getNoise(ctx);
+  filter.type = "lowpass";
+  filter.frequency.setValueAtTime(cutoff, time);
+  filter.frequency.exponentialRampToValueAtTime(cutoff * 0.25, time + length);
+
+  source.connect(filter).connect(envelope(ctx, dest, time, peak, length));
+  source.start(time);
+  source.stop(time + length + 0.02);
 }
 
 // Tiếng "tách" sắc ở đầu đòn: nghe rõ cả trên loa nhỏ, giúp tiếng chém nổi lên trên nhạc.
@@ -88,19 +103,22 @@ function crack(ctx, dest, time, { peak, length }) {
   source.stop(time + length + 0.02);
 }
 
+// Chém trúng: xẹt ngắn của lưỡi kiếm -> đòn đập đục vào thân (không có tiếng ngân kim loại).
 function slash(ctx, dest, time) {
-  crack(ctx, dest, time, { peak: 1.0, length: 0.05 });
-  swish(ctx, dest, time, { peak: 1.8, length: 0.16, from: 7000, to: 1500 });
-  ring(ctx, dest, time + 0.02, [1850, 2740], 0.3, 0.2);
-  thump(ctx, dest, time + 0.015, { peak: 0.9, length: 0.14, from: 260, to: 80 });
+  swish(ctx, dest, time, { peak: 1.0, length: 0.07, from: 6000, to: 2200 });
+  crack(ctx, dest, time + 0.045, { peak: 0.7, length: 0.03 });
+  body(ctx, dest, time + 0.05, { peak: 2.4, length: 0.11, cutoff: 2600 });
+  thump(ctx, dest, time + 0.05, { peak: 1.1, length: 0.1, from: 330, to: 75, wave: "square" });
 }
 
+// Chí mạng: cùng kiểu nhưng nặng hơn, có cú đập thứ hai và tiếng trầm sâu.
 function slashCrit(ctx, dest, time) {
-  crack(ctx, dest, time, { peak: 1.3, length: 0.07 });
-  swish(ctx, dest, time, { peak: 2.2, length: 0.24, from: 9000, to: 900 });
-  ring(ctx, dest, time + 0.02, [1500, 2200, 3300], 0.4, 0.38);
-  thump(ctx, dest, time + 0.015, { peak: 1.2, length: 0.26, from: 200, to: 60 });
-  swish(ctx, dest, time + 0.03, { peak: 0.9, length: 0.16, from: 3500, to: 600 });
+  swish(ctx, dest, time, { peak: 1.4, length: 0.1, from: 8000, to: 1800 });
+  crack(ctx, dest, time + 0.07, { peak: 1.0, length: 0.04 });
+  body(ctx, dest, time + 0.075, { peak: 3.0, length: 0.16, cutoff: 3000 });
+  thump(ctx, dest, time + 0.075, { peak: 1.4, length: 0.16, from: 280, to: 55, wave: "square" });
+  body(ctx, dest, time + 0.13, { peak: 1.6, length: 0.12, cutoff: 1800 });
+  thump(ctx, dest, time + 0.075, { peak: 1.5, length: 0.3, from: 150, to: 38 });
 }
 
 export const SYNTH_SFX = {
