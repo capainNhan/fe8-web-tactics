@@ -267,7 +267,7 @@ export function drawUnit(G, F, part, side) {
       pal[i] = (c & 0x8000) | r | (g << 5) | (b << 10);
     }
     part.fade_104 = (part.fade_104 + 4) & 0xffff;
-    part.vram.loadImage(208, 507 + side, 16, 1, pal);       // LoadImage(rect, pal)
+    part.vram.loadImage(208, 507 + part.slot, 16, 1, pal);   // LoadImage(rect, pal): hàng CLUT của participant
   }
 
   const motion = part.motion[part.group * 11 + part.slot];

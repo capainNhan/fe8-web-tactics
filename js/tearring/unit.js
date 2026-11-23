@@ -9,7 +9,9 @@ import { drawUnit, Frame } from "./draw.js";
 import { MatStack } from "./psx.js";
 import { Vram, Gpu } from "./gpu.js";
 
-export const CLUT_X = 640;
+// CLUT của participant `slot` nằm ở (0, 507 + slot), 256 màu (BtlUnitInit 0x8014e208: CLUT.TIM nạp với y = 507 + idx).
+export const CLUT_X = 0;
+export const CLUT_Y0 = 507;
 
 /** Bảng dùng chung (common.json + rsincos.bin) -> đối tượng toàn cục của phần vẽ. */
 export function createGlobals(common, rsincosBuf) {
@@ -19,6 +21,9 @@ export function createGlobals(common, rsincosBuf) {
   G.motionTbl = common.motionTbl;
   G.vramTable = common.vramTable;
   G.shadowOn = 0;
+  // Trạng thái do sự kiện motion ghi (đọc từ mã máy, các hàm đọc nằm ở 0x801099a4 / 0x80109e0c chưa decomp):
+  G.evtFlag = 0;                 // 0x80163e00, evt 0x02 đặt = 1
+  G.tint = [128, 128, 128, 0];   // 0x80166df8, màu điều biến nền: 128 = nguyên bản; evt 0x20 đặt lại, evt 0x40 chia đôi
   return G;
 }
 
@@ -32,6 +37,15 @@ function parsePoses(d, count) {
     }
     out.push({ n, items });
     o += 2 + 4 * n;
+  }
+  return out;
+}
+
+/** 0x80151aec: đảo thứ tự 8 byte của mỗi nhóm 8 (= lật ngang từng ô 8 pixel 8bpp), `rows` hàng x 256 byte. */
+export function mirrorPage(src, rows) {
+  const out = new Uint8Array(src.subarray(0, rows * 256));
+  for (let i = 0; i < out.length; i += 8) for (let k = 0; k < 4; k++) {
+    const a = out[i + k]; out[i + k] = out[i + 7 - k]; out[i + 7 - k] = a;
   }
   return out;
 }
@@ -54,7 +68,9 @@ export class Bset {
  * @param pak     ArrayBuffer/Uint8Array của BU<nnn>.pak
  * @param G       createGlobals(...)
  * @param vram    Vram dùng chung của hai bên
- * @param o       { side: 0|1, shadow: bool, palette: Uint16Array(256) tuỳ chọn }
+ * @param o       { slot: 0|1 (participant: hàng bảng VRAM + hàng CLUT), side: cờ vẽ của BtlDrawUnit,
+ *                  mirrorPages: lật từng ô 8x8 của trang texture (game làm vậy cho participant 1, 0x8014e034),
+ *                  shadow: bool, palette: Uint16Array(256) tuỳ chọn }
  */
 export function createPart(pak, G, vram, o = {}) {
   const slot = o.slot ?? 0;          // participant 0/1: chọn hàng bảng VRAM và hàng CLUT
@@ -73,7 +89,9 @@ export function createPart(pak, G, vram, o = {}) {
     if (!d) continue;
     const g = (n - 1) >> 1, half = (n - 1) & 1;
     const page = new Uint16Array(128 * 128);
-    const src = new DataView(d.buffer, d.byteOffset, 32768);
+    let bytes = d;
+    if (o.mirrorPages) bytes = mirrorPage(d, 128);
+    const src = new DataView(bytes.buffer, bytes.byteOffset, 32768);
     for (let i = 0; i < 128 * 128; i++) page[i] = src.getUint16(i * 2, true);
     vram.loadImage(tbl[g][0], tbl[g][1] + 128 * half, 128, 128, page);
   }
@@ -83,7 +101,7 @@ export function createPart(pak, G, vram, o = {}) {
     const cdv = new DataView(files["CLUT.TIM"].buffer, files["CLUT.TIM"].byteOffset);
     for (let i = 0; i < 256; i++) pal[i] = cdv.getUint16(20 + 2 * i, true);
   }
-  const clutY = 300 + slot;
+  const clutY = CLUT_Y0 + slot;
   vram.loadImage(CLUT_X, clutY, 256, 1, pal);
 
   const part = {
@@ -101,9 +119,20 @@ export function createPart(pak, G, vram, o = {}) {
       ent: [0, 1, 2, 3].map(() => [0, 1, 2, 3].map(() => ({ x: 0, y: 0, ang: 0, px: 0, py: 0, rec: 0, camx: 0, camy: 0 })))
     },
     // Sự kiện của game gắn vào dữ liệu motion (BtlChanStep).  hit = g_BtlHitFlag: thời điểm TRÚNG ĐÒN thật.
-    events: { hit: null, e02: null, e40: null, e20: null, delay: null },
+    events: {
+      hit: null, delay: null,
+      e02: () => { G.evtFlag = 1; },                                   // BtlEvt_8010adb0
+      e40: () => { for (let i = 0; i < 3; i++) G.tint[i] >>= 1; },     // BtlEvt_8010adf4
+      e20: () => { G.tint = [128, 128, 128, 0]; }                      // BtlEvt_8010aa50(g_BtlEvtArg)
+    },
     // Hàm ngoài CHƯA decomp: để trống = bỏ qua (khớp với bản export đã kiểm chứng).
     hooks: { partPlace: null, partFx: null }
+  };
+  // BtlPartFx 0x80151590 (đọc từ mã máy): bật vệt ảnh, chu kỳ n, xoá con trỏ ghi/đọc.
+  part.hooks.partFx = (p, n) => {
+    p.anim_a4 = 1;
+    p.trail.period = n;
+    for (let i = 0; i < 4; i++) { p.trail.timer[i] = n; p.trail.wp[i] = 0; p.trail.rp[i] = 0; }
   };
   for (const [name, bytes] of Object.entries(files)) {
     const m = /^M(\d+)_(\d+)\.D$/.exec(name);

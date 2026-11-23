@@ -115,9 +115,13 @@ export class TearRingStage {
     this.actors = {};
     names.forEach((n, i) => {
       const cfg = o.config[o.units[i]];
-      const part = createPart(o.assets.paks[i], G, this.vram, { slot: i, side: 0, shadow: cfg.shadow });
       const wantRight = i === 0;                             // bên trái nhìn sang phải, bên phải nhìn sang trái
-      part.flip_ac = (cfg.facing === "right") === wantRight ? 0 : 1;
+      const needFlip = (cfg.facing === "right") !== wantRight;
+      // Participant 1 cần lật: dùng đúng đường của game (trang texture lật ô 8x8 + cờ side=1, 0x8014e034).
+      // Participant 0 cần lật: dùng cờ flip_ac của BtlDrawChan.
+      const real = needFlip && i === 1;
+      const part = createPart(o.assets.paks[i], G, this.vram, { slot: i, side: real ? 1 : 0, mirrorPages: real, shadow: cfg.shadow });
+      part.flip_ac = needFlip && !real ? 1 : 0;
       part.x = o.x[i]; part.y = 0;
       this.actors[n] = new Actor(this, part, n);
     });

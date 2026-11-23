@@ -110,6 +110,7 @@ export class TearRingBattleScene extends Phaser.Scene {
     this.attackerName.setText(atk.name);
     this.defenderName.setText(def.name);
     this.battleMessage.setText("GIAO CHIẾN!");
+    this.sides = [atk, def];            // ô HP bên trái/phải luôn theo bên tấn công/phòng thủ của TRẬN, không theo người đang ra đòn
     this.updateHP(atk, def);
     gameLog(`=== ${atk.name} VS ${def.name} ===`);
 
@@ -181,7 +182,7 @@ export class TearRingBattleScene extends Phaser.Scene {
       this.tweens.resumeAll();
 
       this.cameras.main.shake(result.crit ? 180 : 90, result.crit ? 0.025 : 0.012);
-      this.updateHP(atk, def);
+      this.updateHP(...this.sides);
       gameLog(`${atk.name} đánh trúng ${def.name}, mất ${result.damage} HP.`);
       await this.hitReaction(D, toRight, !!result.crit, def.hp <= 0);
       if (def.hp <= 0) gameLog(def.name + " đã bị hạ gục!");
