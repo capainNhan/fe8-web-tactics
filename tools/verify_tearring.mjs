@@ -6,12 +6,12 @@ import { fileURLToPath } from "node:url";
 import { createGlobals, createPart, Frame, Gpu, Vram } from "../js/tearring/unit.js";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
-const [unit, motionName, outFile, shadowArg] = process.argv.slice(2);
+const [unit, motionName, outFile, shadowArg, sideArg] = process.argv.slice(2);
 const A = path.join(ROOT, "assets", "tearring");
 const common = JSON.parse(fs.readFileSync(path.join(A, "common.json")));
 const G = createGlobals(common, new Uint8Array(fs.readFileSync(path.join(A, "rsincos.bin"))));
 const vram = new Vram();
-const part = createPart(new Uint8Array(fs.readFileSync(path.join(A, `BU${unit.padStart(3, "0")}.pak`))), G, vram, { side: 0, shadow: shadowArg === "shadow" });
+const part = createPart(new Uint8Array(fs.readFileSync(path.join(A, `BU${unit.padStart(3, "0")}.pak`))), G, vram, { side: +(sideArg || 0), shadow: shadowArg === "shadow" });
 
 const [, g, k] = /^M(\d+)_(\d+)/.exec(motionName).map(Number);
 const length = part.motion[g * 11 + k].length;
