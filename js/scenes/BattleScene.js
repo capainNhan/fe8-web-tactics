@@ -39,6 +39,14 @@ export class BattleScene extends Phaser.Scene {
   }
 
   create() {
+    // Cả hai bên có trUnit (data/tearringUnits.js) -> dùng engine TearRing đã port từ decomp.
+    const { attacker, defender } = this.battleData;
+    if (attacker?.trUnit && defender?.trUnit) {
+      this.scene.launch("TearRingBattleScene", this.battleData);
+      this.scene.stop();
+      return;
+    }
+
     this.sprites = new SpriteManager(this);
 
     // Nhạc battle: module riêng, tự dừng khi scene đóng (systems/audio/).

@@ -6,6 +6,7 @@ import {
 import { BootScene } from "./scenes/BootScene.js";
 import { MapScene } from "./scenes/MapScene.js";
 import { BattleScene } from "./scenes/BattleScene.js";
+import { TearRingBattleScene } from "./scenes/TearRingBattleScene.js";
 import { mountMusicToggle } from "./systems/ui/MusicToggle.js";
 
 const game = new Phaser.Game({
@@ -26,7 +27,7 @@ const game = new Phaser.Game({
     autoCenter: Phaser.Scale.CENTER_BOTH
   },
 
-  scene: [BootScene, MapScene, BattleScene]
+  scene: [BootScene, MapScene, BattleScene, TearRingBattleScene]
 });
 
 window.fe8Game = game;

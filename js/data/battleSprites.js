@@ -29,16 +29,6 @@ const MOUNTED_ROLES = {
   crit: "M1_8"     // chí mạng
 };
 
-// Vai trò cho unit nhập từ bản decomp (tools/import_decomp.py): mới có đòn đánh
-// (M1_x) nên idle = frame đầu của đòn; chưa có move/dodge -> BattleScene dùng
-// hiệu ứng tween mặc định cho hai vai trò đó.
-const DECOMP_ROLES = code => ({
-  idle: "IDLE",
-  attack: code,
-  attack2: code,
-  crit: code
-});
-
 export const BATTLE_SPRITES = {
   Char6: {
     facing: "left",
@@ -80,26 +70,6 @@ export const BATTLE_SPRITES = {
     reach: 125,
     roles: MOUNTED_ROLES,
     impact: { M1_0: 6, M1_1: 1, M1_8: 3 }
-  },
-  // ---- Nhập từ decomp TearRing Saga (assets/characters/BU0xx) ----
-  // impact là ước lượng: bước đầu tiên có hiệu ứng trộn màu. Sự kiện trúng đòn
-  // thật (BtlEvt_*) chưa được decomp, chỉnh tay nếu cần.
-  BU004: {
-    facing: "right", scale: 1.25, anchor: { x: 166, y: 148 },
-    rest: "f071", reach: 125,
-    roles: DECOMP_ROLES("M1_0"), impact: { M1_0: 2 }
-  },
-
-  BU030: {
-    facing: "right", scale: 1.25, anchor: { x: 117, y: 108 },
-    rest: "f000", reach: 125,
-    roles: DECOMP_ROLES("M1_0"), impact: { M1_0: 3 }
-  },
-
-  BU052: {
-    facing: "left", scale: 1.25, anchor: { x: 108, y: 119 },
-    rest: "f002", reach: 125,
-    roles: DECOMP_ROLES("M1_0"), impact: { M1_0: 4 }
   }
 };
 
