@@ -4,8 +4,7 @@ export const unitsData = [
     id: "p1",
     name: "Kỵ Sĩ",
     team: "player",
-    battleSprite: "Char7",
-    trUnit: "BU004",
+    trUnit: "BU016",
     x: 1,
     y: 3,
 
@@ -35,8 +34,7 @@ export const unitsData = [
     id: "e1",
     name: "Kỵ Binh Địch",
     team: "enemy",
-    battleSprite: "Char6",
-    trUnit: "BU052",
+    trUnit: "BU051",
     x: 5,
     y: 3,
 
@@ -66,7 +64,7 @@ export const unitsData = [
     id: "p2",
     name: "Kỵ Sĩ Thanh Long",
     team: "player",
-    battleSprite: "Char8",
+    trUnit: "BU038",
     x: 1,
     y: 2,
 
@@ -96,7 +94,7 @@ export const unitsData = [
     id: "p3",
     name: "Kỵ Sĩ Hắc Phong",
     team: "player",
-    battleSprite: "Char8",
+    trUnit: "BU002",
     x: 1,
     y: 4,
 
@@ -126,7 +124,7 @@ export const unitsData = [
     id: "e2",
     name: "Kỵ Binh Địch Nhị",
     team: "enemy",
-    battleSprite: "Char8R",
+    trUnit: "BU061",
     x: 5,
     y: 2,
 
@@ -156,7 +154,7 @@ export const unitsData = [
     id: "e3",
     name: "Kỵ Binh Địch Tam",
     team: "enemy",
-    battleSprite: "Char8R",
+    trUnit: "BU081",
     x: 5,
     y: 4,
 

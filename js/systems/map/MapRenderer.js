@@ -1,8 +1,6 @@
 
 import { TILE, GRID, px } from "../../config.js";
 import { TerrainRenderer } from "./TerrainRenderer.js";
-import { SpriteManager } from "../sprites/SpriteManager.js";
-import { getBattleSpriteId } from "../../data/battleSprites.js";
 
 /**
  * MAP RENDERER
@@ -22,7 +20,6 @@ export class MapRenderer {
     this.terrain.draw();
 
     this.graphics = scene.add.graphics();
-    this.sprites = new SpriteManager(scene);
 
     // unit.id -> { container, hpBar }
     this.tokens = new Map();
@@ -110,81 +107,29 @@ export class MapRenderer {
   }
 
   /**
-   * Đo vùng có hình của một frame trong sheet: tâm ngang và đáy chân (px trong ô).
-   */
-  measureFrame(set, index) {
-    const image = this.scene.textures
-      .get(set.textureKey)
-      .getSourceImage();
-
-    const col = index % set.columns;
-    const row = Math.floor(index / set.columns);
-
-    const canvas = document.createElement("canvas");
-    canvas.width = set.cellW;
-    canvas.height = set.cellH;
-
-    const context = canvas.getContext("2d", { willReadFrequently: true });
-
-    context.drawImage(
-      image,
-      col * set.cellW, row * set.cellH, set.cellW, set.cellH,
-      0, 0, set.cellW, set.cellH
-    );
-
-    const data = context.getImageData(0, 0, set.cellW, set.cellH).data;
-
-    let minX = set.cellW, maxX = -1, bottom = -1;
-
-    for (let y = 0; y < set.cellH; y++) {
-      for (let x = 0; x < set.cellW; x++) {
-        if (data[(y * set.cellW + x) * 4 + 3] > 40) {
-          if (x < minX) minX = x;
-          if (x > maxX) maxX = x;
-          bottom = y;
-        }
-      }
-    }
-
-    if (maxX < 0) {
-      return { centerX: set.cellW / 2, bottom: set.cellH };
-    }
-
-    return { centerX: (minX + maxX + 1) / 2, bottom: bottom + 1 };
-  }
-
-  /**
-   * Hình đại diện trên map: frame đứng chờ (idle) của sprite trận đánh.
+   * Hình đại diện trên map: thế đứng chờ (M0_0) do engine TearRing dựng (js/tearring/token.js).
    * Nếu sprite lỗi thì quay về hình tròn có chữ P/E như bản cũ.
    */
   createBody(unit, footY, teamColor) {
     const scene = this.scene;
 
     try {
-      const set = this.sprites.get(getBattleSpriteId(unit));
+      const set = scene.registry.get("trTokens")?.get(unit.trUnit);
+      if (!set) throw new Error("chưa có token cho " + unit.trUnit);
 
       // Quy ước: phe người chơi đứng bên trái màn đánh (nhìn sang phải),
       // phe địch đứng bên phải (nhìn sang trái).
       const slot = unit.team === "player" ? "left" : "right";
-
       const flip = set.flipFor(slot);
 
-      const sprite = scene.add.sprite(0, footY, set.textureKey, set.idleFrame);
-
-      // Phaser không lật origin khi flipX, nên không dùng anchor của màn đánh
-      // (dễ làm token lệch ô). Thay vào đó đo ngay hình idle: đặt origin ở
-      // giữa thân ngang và chạm đáy chân, rồi lật theo hướng nhìn.
-      const box = this.measureFrame(set, set.idleFrame);
-
-      const ox = box.centerX / set.cellW;
-
-      sprite
-        .setOrigin(flip ? 1 - ox : ox, box.bottom / set.cellH)
-        .setScale((TILE * 0.95) / box.bottom)
+      // Token là ảnh đã cắt sát hình: gốc ở giữa thân, chạm đáy chân.
+      const sprite = scene.add.sprite(0, footY, set.textureKey)
+        .setOrigin(0.5, 1)
+        .setScale(Math.min((TILE * 0.95) / set.h, (TILE * 1.15) / set.w))
         .setFlipX(flip);
 
-      // Để lật hướng khi đi bộ (origin phải đổi theo hướng lật).
-      sprite.setData("face", { ox, oy: box.bottom / set.cellH, baseFlip: flip });
+      // Để lật hướng khi đi bộ (faceToward/faceDefault).
+      sprite.setData("face", { ox: 0.5, oy: 1, baseFlip: flip });
       sprite.setData("set", set);
 
       return sprite;

@@ -56,6 +56,8 @@ export class Bset {
     this.bytes = bytes;
   }
   get flags0() { return this.dv.getUint32(0, true); }
+  get x() { return this.dv.getInt16(0x06, true); }   // vị trí đứng gốc (BtlBattleInit)
+  get y() { return this.dv.getInt16(0x08, true); }
   get w0a() { return this.dv.getInt16(0x0a, true); }
   get b0f() { return this.bytes[0x0f]; }
   get mask12() { return this.bytes[0x12]; }

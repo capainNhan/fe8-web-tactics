@@ -34,5 +34,5 @@ Motion của BU004/BU030/BU052 không dùng 0x02/0x20/0x40 (chỉ unit phép/đ�
 - `BtlLoadPages` 0x8014e034: trang B1..B6 -> (nhóm = (n-1)/2, nửa trên/dưới); participant 1 gọi 0x80151aec
   (đảo 8 byte mỗi nhóm 8 = lật từng ô) trước khi nạp. Đường vẽ `side=1` đã đối chiếu từng byte với mã máy.
 - `BtlPartFx` 0x80151590.
-- Bộ điều phối trận (chọn motion nào, lúc nào, vị trí đứng): do `TearRingBattleScene` quyết định.
+- Bộ điều phối trận (chọn motion nào, lúc nào, vị trí đứng): do `BattleScene` quyết định.
 - Tốc độ tick: không suy ra được từ mã; mặc định 60 Hz (`PS1_TICK_MS`), chỉnh qua tuỳ chọn `tickMs`.

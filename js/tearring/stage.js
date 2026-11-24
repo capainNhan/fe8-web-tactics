@@ -43,6 +43,35 @@ class Actor {
 
   has(id) { return !!this.part.motion[id]; }
 
+  /**
+   * Biến mất khi bị hạ gục - đúng máy trạng thái của BtlFrameDraw 0x800fe8e4:
+   *   chờ 20 khung -> (âm thanh 38) -> mức sáng 255, mỗi khung -4 cho tới khi < 8, đang lúc đó vẽ
+   *   với f_a8=1 (tô màu xám = mức), f_b8=1, blend_bc=1 (cộng GPU: B+F) -> thôi vẽ unit.
+   * Trả Promise xong khi unit đã biến mất.  onSound(38, 100, 100) nếu có.
+   */
+  die({ onSound } = {}) {
+    return new Promise(resolve => { this.fade = { state: 2, delay: 20, level: 0, resolve, onSound }; });
+  }
+
+  _fadeStep() {
+    const f = this.fade;
+    if (!f) return;
+    const p = this.part;
+    if (f.state === 2) {
+      f.delay--;
+      if (f.delay > 0) return;
+      f.level = 255; f.state = 3;
+      f.onSound && f.onSound(38, 100, 100);
+      return;
+    }
+    if (f.state === 3) {
+      p.f_a8 = 1; p.f_b8 = 1; p.blend_bc = 1;
+      p.col_c0 = f.level | (f.level << 8) | (f.level << 16);
+      f.level = (f.level - 4) & 0xff;
+      if (f.level < 8) { f.state = 4; this.visible = false; f.resolve(); }
+    }
+  }
+
   /** Lặp một motion (idle, phi...) cho tới khi có lệnh khác. */
   loop(id) {
     this._finish();
@@ -77,6 +106,7 @@ class Actor {
 
   tick() {
     const c = this.cur, p = this.part;
+    this._fadeStep();
     if (!c) return;
     const ended = p.step();
     if (!c.loop && !c.hitFired && c.fallbackTick >= 0 && p.tick >= c.fallbackTick) { c.hitFired = true; c.hitRes(true); }
@@ -99,7 +129,7 @@ export class TearRingStage {
   /**
    * @param scene   Phaser.Scene
    * @param o       { assets: {common, rsincos, paks:[left,right]}, units:[idLeft,idRight], config: TEARRING_UNITS,
-   *                  x: [xL, xR] (toạ độ PSX), key, tickMs, backdrop: {sky,line,ground,horizon} }
+   *                  x: [xL, xR] tuỳ chọn (mặc định -bset.x / +bset.x), key, tickMs, backdrop: {sky,line,ground,horizon} }
    */
   constructor(scene, o) {
     this.scene = scene;
@@ -109,7 +139,7 @@ export class TearRingStage {
     this.vram = new Vram();
     const G = createGlobals(o.assets.common, o.assets.rsincos);
     this.G = G;
-    this.backdrop = buildBackdrop({ sky: 0x263b55, line: 0x8c9a9e, ground: 0x182337, horizon: 118, ...(o.backdrop || {}) });
+    this.backdrop = buildBackdrop({ sky: 0x263b55, line: 0x8c9a9e, ground: 0x182337, horizon: 128, ...(o.backdrop || {}) });
 
     const names = ["left", "right"];
     this.actors = {};
@@ -122,7 +152,14 @@ export class TearRingStage {
       const real = needFlip && i === 1;
       const part = createPart(o.assets.paks[i], G, this.vram, { slot: i, side: real ? 1 : 0, mirrorPages: real, shadow: cfg.shadow });
       part.flip_ac = needFlip && !real ? 1 : 0;
-      part.x = o.x[i]; part.y = 0;
+      // BtlBattleInit 0x800ff4d4 + BtlSetupLayout 0x800fee48 (cận chiến, không lệch): bên này x = -bset.x, bên kia x = +bset.x,
+      // y = bset.y; camera (0, 160) => màn hình x = x + 160, y = 160 - y.
+      part.y = part.bset.y;
+      part.x = 0;
+      // Gốc toạ độ của ảnh gốc không nằm giữa thân (ngựa lệch tới ~20px): đo thế đứng chờ rồi bù để
+      // tâm hình rơi đúng vị trí đứng của game, tránh một bên bị cắt mép màn hình.  (Chỉ chỉnh hiển thị.)
+      const nominal = o.x ? o.x[i] : (i === 0 ? -part.bset.x : part.bset.x);
+      part.x = nominal - this._idleCenter(part);
       this.actors[n] = new Actor(this, part, n);
     });
 
@@ -139,6 +176,19 @@ export class TearRingStage {
     this.render();
   }
 
+  /** Lệch ngang (px màn hình) giữa gốc và tâm hình ở thế đứng chờ M0_0, theo hướng đã lật. */
+  _idleCenter(part) {
+    part.start(0, 0, part.y);
+    const F = new Frame({ camX: 0, camY: 160 });
+    part.draw(F);
+    const img = new Gpu(this.vram, { width: STAGE_W, height: STAGE_H, mode: "layer" }).run(F).canvas.image();
+    let x0 = STAGE_W, x1 = -1;
+    for (let y = 0; y < STAGE_H; y++) for (let x = 0; x < STAGE_W; x++) {
+      if (img[(y * STAGE_W + x) * 4 + 3] > 40) { if (x < x0) x0 = x; if (x > x1) x1 = x; }
+    }
+    return x1 < 0 ? 0 : Math.round((x0 + x1) / 2 - 160);
+  }
+
   update(dt) {
     if (this.frozen) return;
     this.acc = Math.min(this.acc + dt, this.tickMs * 6);
@@ -152,7 +202,7 @@ export class TearRingStage {
   }
 
   render() {
-    const F = new Frame({ camX: 160, camY: 120 });
+    const F = new Frame({ camX: 0, camY: 160 });          // cam_x/cam_y của BtlSetupLayout (cận chiến)
     for (const a of Object.values(this.actors)) if (a.visible) a.part.draw(F);
     const gpu = new Gpu(this.vram, { width: STAGE_W, height: STAGE_H, mode: "backdrop", backdrop: this.backdrop }).run(F);
     this.ctx.putImageData(new ImageData(gpu.canvas.px, STAGE_W, STAGE_H), 0, 0);
