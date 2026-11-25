@@ -131,4 +131,44 @@ await test("phi tới dừng đúng khi hai hộp chạm nhau (khoảng cách t�
   assert.ok(ticks > 10 && ticks < 100, "thời gian phi hợp lý: " + ticks);
 });
 
+await test("phi tới (loại đòn 0 của BSET+0x0e) di chuyển TUYẾN TÍNH: bước mỗi tick gần như không đổi (TmLerp, không phải Bézier)", async () => {
+  const scene = fakeScene();
+  const stage = new TearRingStage(scene, { assets: { common, rsincos, paks: [pak("BU016"), pak("BU051")] }, units: ["BU016", "BU051"], config: TEARRING_UNITS });
+  const step = n => { for (let i = 0; i < n; i++) scene.listeners.u(0, stage.tickMs + 0.001); };
+  const L = stage.actors.left, R = stage.actors.right;
+  assert.equal(L.part.bset.dv.getUint8(0x0e), 0, "unit thử phải là loại đòn 0");
+  let arrived = false;
+  L.dash(R).then(() => (arrived = true));
+  const xs = [L.gx];
+  for (let i = 0; i < 400 && !arrived; i++) { step(1); await Promise.resolve(); xs.push(L.gx); }
+  assert.ok(arrived);
+  const d = xs.slice(1, -1).map((x, i) => x - xs[i]);          // bỏ bước chốt cuối (gx = đích)
+  const mn = Math.min(...d), mx = Math.max(...d);
+  assert.ok(mx - mn <= 1, "bước/tick phải không đổi (±1): " + mn + ".." + mx);
+});
+
+await test("camera bám bên phi tới (0x801091d4) chỉ khi bên bị đánh còn sát mép (sx > 216): sau đó dừng, hai bên cách 64, camera đứng yên", async () => {
+  const scene = fakeScene();
+  const stage = new TearRingStage(scene, { assets: { common, rsincos, paks: [pak("BU016"), pak("BU051")] }, units: ["BU016", "BU051"], config: TEARRING_UNITS });
+  const step = n => { for (let i = 0; i < n; i++) scene.listeners.u(0, stage.tickMs + 0.001); };
+  const L = stage.actors.left, R = stage.actors.right;
+  const scr = a => a.gx - (stage.camX - 160);
+  const l0 = scr(L), r0 = scr(R);
+  let arrived = false;
+  L.dash(R).then(() => (arrived = true));
+  let panning = true, camPrev = 0;
+  for (let i = 0; i < 400 && !arrived; i++) {
+    step(1); await Promise.resolve();
+    if (stage.camX !== camPrev) { assert.ok(panning, "camera không được động đậy trở lại sau khi đã dừng"); camPrev = stage.camX; }
+    else if (camPrev !== 0 || i > 0) panning = false;
+  }
+  assert.ok(arrived);
+  assert.equal(Math.round(scr(R) - scr(L)), 64, "chạm nhau cách 64");
+  assert.ok(scr(R) <= 216 && scr(R) > 216 - 30, "camera dừng ngay khi bên bị đánh vào vùng giữa: " + scr(R));
+  assert.ok(Math.abs(stage.camX - (r0 - 216)) < 30 && stage.camX > 0);
+  assert.ok(scr(L) > l0, "bên phi đi tiếp trên màn hình sau khi camera dừng");
+  const cx = stage.camX; step(30);
+  assert.equal(stage.camX, cx, "camera đứng nguyên sau khi phi xong");
+});
+
 console.log(`\n${passed} test đạt.`);
