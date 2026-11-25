@@ -5,11 +5,14 @@
 import { createGlobals, createPart, Frame, Gpu, Vram } from "./unit.js";
 
 export class TokenSet {
-  constructor(id, textureKey, w, h, facing) {
-    this.id = id; this.textureKey = textureKey; this.w = w; this.h = h; this.facing = facing;
+  constructor(id, textureKey, w, h) {
+    this.id = id; this.textureKey = textureKey; this.w = w; this.h = h;
   }
-  /** slot "left": bên nhìn sang phải; "right": bên nhìn sang trái. Trả true nếu cần lật ngang. */
-  flipFor(slot) { return slot === "left" ? this.facing !== "right" : this.facing !== "left"; }
+  /**
+   * Mọi ảnh gốc của game quay sang TRÁI (participant 0 đứng bên phải, không lật).  Bên trái của màn đánh
+   * (nhìn sang phải) là ảnh lật ngang.  slot: "left" | "right".  Trả true nếu cần lật ngang.
+   */
+  flipFor(slot) { return slot === "left"; }
 }
 
 /** Dựng token cho các unit trong `config` mà asset đã được BootScene nạp (cache "tr-<id>"). */
@@ -19,7 +22,7 @@ export function buildTokens(scene, config) {
   const G = createGlobals(common, rsincos);
   const tokens = new Map();
 
-  for (const [id, cfg] of Object.entries(config)) {
+  for (const id of Object.keys(config)) {
     const pak = scene.cache.binary.get("tr-" + id);
     if (!pak) continue;
 
@@ -47,7 +50,7 @@ export function buildTokens(scene, config) {
     const tex = scene.textures.createCanvas(key, w, h);
     tex.getContext().putImageData(new ImageData(crop, w, h), 0, 0);
     tex.refresh();
-    tokens.set(id, new TokenSet(id, key, w, h, cfg.facing));
+    tokens.set(id, new TokenSet(id, key, w, h));
   }
   return tokens;
 }

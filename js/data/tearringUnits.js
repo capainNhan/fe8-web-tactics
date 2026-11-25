@@ -3,7 +3,6 @@
  * Unit chiến đấu và token trên map đều chạy bằng engine port từ bản decomp (js/tearring/).
  * Dữ liệu gốc do tools/tearring_extract.py trích ra assets/tearring/BU<nnn>.pak (xem ADD_CHARACTER.md).
  *
- *   facing : hướng nhìn của ảnh gốc ("left" | "right"); engine tự lật bằng cờ của game
  *   shadow : vẽ bóng đổ (dữ liệu bóng trong BSET.DDD của unit)
  *   kind   : "mounted" (kỵ binh) | "foot" (bộ binh)
  *   weapon : vũ khí của đòn đánh thường (M1_0): "sword" | "lance" | "bow" | "magic"
@@ -16,41 +15,41 @@ export const TEARRING_ROOT = "./assets/tearring/";
 
 export const TEARRING_UNITS = {
   // ---- Đang dùng trong data/units.js ----
-  BU016: { facing: "left",  shadow: true, kind: "mounted", weapon: "sword", note: "ngựa trắng, tóc xanh" },
-  BU038: { facing: "left",  shadow: true, kind: "mounted", weapon: "sword", note: "tóc xanh lục, ngựa trắng yên xanh" },
-  BU002: { facing: "right", shadow: true, kind: "mounted", weapon: "sword", note: "ngựa nâu, áo tím" },
-  BU051: { facing: "left",  shadow: true, kind: "mounted", weapon: "sword", note: "ngựa xám ô-liu" },
-  BU061: { facing: "left",  shadow: true, kind: "mounted", weapon: "sword", note: "ngựa trắng yên xanh" },
-  BU081: { facing: "left",  shadow: true, kind: "mounted", weapon: "sword", note: "ngựa trắng yên vàng" },
+  BU016: { shadow: true, kind: "mounted", weapon: "sword", note: "ngựa trắng, tóc xanh" },
+  BU038: { shadow: true, kind: "mounted", weapon: "sword", note: "tóc xanh lục, ngựa trắng yên xanh" },
+  BU002: { shadow: true, kind: "mounted", weapon: "sword", note: "ngựa nâu, áo tím" },
+  BU051: { shadow: true, kind: "mounted", weapon: "sword", note: "ngựa xám ô-liu" },
+  BU061: { shadow: true, kind: "mounted", weapon: "sword", note: "ngựa trắng yên xanh" },
+  BU081: { shadow: true, kind: "mounted", weapon: "sword", note: "ngựa trắng yên vàng" },
 
   // ---- Kho unit để dùng sau: bộ binh kiếm ----
-  BU027: { facing: "right", shadow: true, kind: "foot", weapon: "sword", note: "tóc xanh, vệt chém" },
-  BU048: { facing: "right", shadow: true, kind: "foot", weapon: "sword", note: "giáp xám, áo choàng" },
-  BU058: { facing: "right", shadow: true, kind: "foot", weapon: "sword", note: "giáp xanh" },
-  BU188: { facing: "right", shadow: true, kind: "foot", weapon: "sword", note: "nữ, áo xanh lục" },
-  BU198: { facing: "right", shadow: true, kind: "foot", weapon: "sword", note: "nữ, tóc xanh nhạt" },
-  BU201: { facing: "right", shadow: true, kind: "foot", weapon: "sword", note: "hiệp sĩ giáp đen, khiên" },
-  BU204: { facing: "right", shadow: true, kind: "foot", weapon: "sword", note: "giáp nặng, khiên lớn" },
-  BU207: { facing: "right", shadow: true, kind: "foot", weapon: "sword", note: "áo choàng xanh quý tộc" },
-  BU224: { facing: "right", shadow: true, kind: "foot", weapon: "sword", note: "giáp xanh trắng" },
-  BU230: { facing: "right", shadow: true, kind: "foot", weapon: "sword", note: "nữ tóc đỏ" },
-  BU233: { facing: "right", shadow: true, kind: "foot", weapon: "sword", note: "tóc cam, giáp nhẹ" },
+  BU027: { shadow: true, kind: "foot", weapon: "sword", note: "tóc xanh, vệt chém" },
+  BU048: { shadow: true, kind: "foot", weapon: "sword", note: "giáp xám, áo choàng" },
+  BU058: { shadow: true, kind: "foot", weapon: "sword", note: "giáp xanh" },
+  BU188: { shadow: true, kind: "foot", weapon: "sword", note: "nữ, áo xanh lục" },
+  BU198: { shadow: true, kind: "foot", weapon: "sword", note: "nữ, tóc xanh nhạt" },
+  BU201: { shadow: true, kind: "foot", weapon: "sword", note: "hiệp sĩ giáp đen, khiên" },
+  BU204: { shadow: true, kind: "foot", weapon: "sword", note: "giáp nặng, khiên lớn" },
+  BU207: { shadow: true, kind: "foot", weapon: "sword", note: "áo choàng xanh quý tộc" },
+  BU224: { shadow: true, kind: "foot", weapon: "sword", note: "giáp xanh trắng" },
+  BU230: { shadow: true, kind: "foot", weapon: "sword", note: "nữ tóc đỏ" },
+  BU233: { shadow: true, kind: "foot", weapon: "sword", note: "tóc cam, giáp nhẹ" },
 
   // ---- Giáo ----
-  BU212: { facing: "left",  shadow: true, kind: "foot",    weapon: "lance", note: "lính giáp ô-liu" },
-  BU218: { facing: "left",  shadow: true, kind: "foot",    weapon: "lance", note: "hiệp sĩ đen" },
-  BU171: { facing: "left",  shadow: true, kind: "mounted", weapon: "lance", note: "kỵ binh giáp đen" },
-  BU172: { facing: "left",  shadow: true, kind: "mounted", weapon: "lance", note: "kỵ binh giáp đen" },
+  BU212: { shadow: true, kind: "foot",    weapon: "lance", note: "lính giáp ô-liu" },
+  BU218: { shadow: true, kind: "foot",    weapon: "lance", note: "hiệp sĩ đen" },
+  BU171: { shadow: true, kind: "mounted", weapon: "lance", note: "kỵ binh giáp đen" },
+  BU172: { shadow: true, kind: "mounted", weapon: "lance", note: "kỵ binh giáp đen" },
 
   // ---- Cung ----
-  BU185: { facing: "right", shadow: true, kind: "foot", weapon: "bow", note: "cung thủ áo tím" },
-  BU190: { facing: "right", shadow: true, kind: "foot", weapon: "bow", note: "cung thủ nữ áo xanh lục" },
-  BU196: { facing: "right", shadow: true, kind: "foot", weapon: "bow", note: "cung thủ nữ áo xanh lục" },
+  BU185: { shadow: true, kind: "foot", weapon: "bow", note: "cung thủ áo tím" },
+  BU190: { shadow: true, kind: "foot", weapon: "bow", note: "cung thủ nữ áo xanh lục" },
+  BU196: { shadow: true, kind: "foot", weapon: "bow", note: "cung thủ nữ áo xanh lục" },
 
   // ---- Đã dùng để kiểm chứng engine (đòn kỹ năng / phép) ----
-  BU004: { facing: "right", shadow: true, kind: "mounted", weapon: "magic", note: "kỵ binh phép, hào quang xanh" },
-  BU052: { facing: "left",  shadow: true, kind: "mounted", weapon: "sword", note: "bản kỹ năng của BU051 (hào quang)" },
-  BU030: { facing: "right", shadow: true, kind: "foot",    weapon: "magic", note: "bộ binh tóc xanh, phép" }
+  BU004: { shadow: true, kind: "mounted", weapon: "magic", note: "kỵ binh phép, hào quang xanh" },
+  BU052: { shadow: true, kind: "mounted", weapon: "sword", note: "bản kỹ năng của BU051 (hào quang)" },
+  BU030: { shadow: true, kind: "foot",    weapon: "magic", note: "bộ binh tóc xanh, phép" }
 };
 
 // Số motion = nhóm * 11 + khe (M<g>_<k>.D)

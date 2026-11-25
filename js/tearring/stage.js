@@ -9,6 +9,7 @@
  * Phần ĐIỀU PHỐI (chọn motion nào, lúc nào) nằm trong B.BIN nhưng chưa decomp -> do scene quyết định.
  */
 import { createGlobals, createPart, Frame, Gpu, Vram } from "./unit.js";
+import { tmBezier } from "./path.js";
 
 export const STAGE_W = 320, STAGE_H = 160;
 export const PS1_TICK_MS = 1000 / 60;
@@ -42,6 +43,42 @@ class Actor {
   }
 
   has(id) { return !!this.part.motion[id]; }
+
+  /** Toạ độ ngang theo hệ của GAME (gốc ảnh), chưa tính bù tâm hình dùng để hiển thị. */
+  get gx() { return this.part.x + this.shift; }
+  set gx(v) { this.part.x = v - this.shift; }
+
+  /**
+   * Phi tới sát đối thủ - công thức của BtlApproachSetup 0x800ffeec + pha 1 của 0x8010031c (0x80100534):
+   *   khoảng trống = |xA - xB| - (wA + wB)/2   (w = BSET+0x0a; 0 ... 640)   => dừng khi hai "hộp" chạm nhau
+   *   tốc độ = bset[0x0f] (1..20) px/tick;  mỗi tick tiến độ t += 32767 / (khoảng trống / tốc độ)
+   *   vị trí = Bezier 4 điểm (điều khiển ở 1/4 và 3/4 đoạn) giữa vị trí đầu và cuối.
+   * Chỉ trục ngang được áp (điểm điều khiển dọc của game chưa rõ nghĩa).  Trả Promise khi tới nơi.
+   */
+  dash(target, { motion = 1 } = {}) {
+    const p = this.part, wsum = p.bset.w0a + target.part.bset.w0a;
+    let gap = Math.abs(this.gx - target.gx) - Math.trunc(wsum / 2);
+    gap = Math.max(0, Math.min(640, gap));
+    if (gap <= 0) return Promise.resolve();
+    const spd = Math.max(1, Math.min(20, p.bset.b0f || 1));
+    const perTick = Math.max(1, Math.trunc(gap / spd));
+    const x0 = Math.round(this.gx), dir = target.gx >= this.gx ? 1 : -1, x1 = x0 + dir * gap;
+    if (this.has(motion)) this.loop(motion);
+    return new Promise(resolve => { this.dashing = { x0, x1, speed: Math.trunc(32767 / perTick), t: 0, resolve }; });
+  }
+
+  _dashStep() {
+    const d = this.dashing;
+    if (!d) return;
+    d.t += d.speed;
+    let done = false;
+    if (d.t > 32767) { d.t = 32767; done = true; }
+    if (done) { this.gx = d.x1; this.dashing = null; d.resolve(); return; }
+    const mid = Math.trunc((d.x0 + d.x1) / 2);
+    const P = (x, y = 0) => ({ x, y }), out = { x: 0, y: 0 };
+    tmBezier(out, P(d.x0), P(Math.trunc((d.x0 + mid) / 2)), P(Math.trunc((d.x1 + mid) / 2)), P(d.x1), d.t);
+    this.gx = out.x;
+  }
 
   /**
    * Biến mất khi bị hạ gục - đúng máy trạng thái của BtlFrameDraw 0x800fe8e4:
@@ -85,7 +122,11 @@ class Actor {
     const cur = { id, loop: false, returnTo, hits: 0, hitFired: false, extraHit: null };
     cur.hitP = new Promise(r => (cur.hitRes = r));
     cur.doneP = new Promise(r => (cur.doneRes = r));
-    cur.fallbackTick = this._hasHit(id) ? -1 : Math.floor(this.part.motion[id].length * 0.4);
+    // Thời điểm trúng đòn THẬT của game: BSET +0x14 (M1_0), +0x16 (M1_1), +0x18 (M1_8) -> bộ đếm +0x21c của bộ điều phối
+    // (0x801014a0..0x80101d98).  Đã đối chiếu bằng hình: vệt chém/chớp phép xuất hiện đúng tick đó.
+    const off = { 11: 0x14, 12: 0x16, 19: 0x18 }[id];
+    cur.hitTick = off !== undefined ? this.part.bset.dv.getUint16(off, true) : -1;
+    cur.fallbackTick = cur.hitTick < 0 && !this._hasHit(id) ? Math.floor(this.part.motion[id].length * 0.4) : -1;
     this.cur = cur;
     this.part.start(id, this.part.x, this.part.y);
     return { hit: cur.hitP, done: cur.doneP, set onHit(fn) { cur.extraHit = fn; } };
@@ -95,6 +136,10 @@ class Actor {
     const c = this.cur;
     if (!c || c.loop) return;
     c.hits++;
+    if (c.hitTick >= 0) {                    // có bộ đếm thật: sự kiện 0x01 chỉ là nhát phụ sau lần trúng chính
+      if (c.hitFired && c.extraHit) c.extraHit(c.hits);
+      return;
+    }
     if (!c.hitFired) { c.hitFired = true; c.hitRes(true); }
     else if (c.extraHit) c.extraHit(c.hits);
   }
@@ -106,10 +151,14 @@ class Actor {
 
   tick() {
     const c = this.cur, p = this.part;
+    this._dashStep();
     this._fadeStep();
     if (!c) return;
     const ended = p.step();
-    if (!c.loop && !c.hitFired && c.fallbackTick >= 0 && p.tick >= c.fallbackTick) { c.hitFired = true; c.hitRes(true); }
+    if (!c.loop && !c.hitFired) {
+      const at = c.hitTick >= 0 ? c.hitTick : c.fallbackTick;
+      if (at >= 0 && p.tick >= at) { c.hitFired = true; c.hitRes(true); }
+    }
     if (!ended) return;
     if (c.loop) p.start(c.id, p.x, p.y);
     else {
@@ -139,29 +188,32 @@ export class TearRingStage {
     this.vram = new Vram();
     const G = createGlobals(o.assets.common, o.assets.rsincos);
     this.G = G;
-    this.backdrop = buildBackdrop({ sky: 0x263b55, line: 0x8c9a9e, ground: 0x182337, horizon: 128, ...(o.backdrop || {}) });
+    this.backdropBase = buildBackdrop({ sky: 0x263b55, line: 0x8c9a9e, ground: 0x182337, horizon: 128, ...(o.backdrop || {}) });
+    this.backdrop = this.backdropBase;
+    this._tintKey = "128,128,128";
 
-    const names = ["left", "right"];
+    // Cơ chế của game (BtlLoadPages 0x8014e034 + BtlFrameDraw 0x800fe8e4): hướng nhìn KHÔNG phụ thuộc unit.
+    //   participant 0: trang texture nguyên bản, side = 0, đứng x = +bset.x  (bên PHẢI màn hình, ảnh gốc nhìn TRÁI)
+    //   participant 1: trang texture lật từng ô 8x8, side = 1, đứng x = -bset.x (bên TRÁI màn hình, nhìn sang phải)
+    // Màn hình: sx = x + 160 - cam_x với cam_x = 0 (BtlSetupLayout, cận chiến mặc định).
+    const sides = { left: 1, right: 0 };
     this.actors = {};
-    names.forEach((n, i) => {
-      const cfg = o.config[o.units[i]];
-      const wantRight = i === 0;                             // bên trái nhìn sang phải, bên phải nhìn sang trái
-      const needFlip = (cfg.facing === "right") !== wantRight;
-      // Participant 1 cần lật: dùng đúng đường của game (trang texture lật ô 8x8 + cờ side=1, 0x8014e034).
-      // Participant 0 cần lật: dùng cờ flip_ac của BtlDrawChan.
-      const real = needFlip && i === 1;
-      const part = createPart(o.assets.paks[i], G, this.vram, { slot: i, side: real ? 1 : 0, mirrorPages: real, shadow: cfg.shadow });
-      part.flip_ac = needFlip && !real ? 1 : 0;
-      // BtlBattleInit 0x800ff4d4 + BtlSetupLayout 0x800fee48 (cận chiến, không lệch): bên này x = -bset.x, bên kia x = +bset.x,
-      // y = bset.y; camera (0, 160) => màn hình x = x + 160, y = 160 - y.
+    for (const name of ["left", "right"]) {
+      const idx = sides[name];
+      const unitId = o.units[name === "left" ? 0 : 1];
+      const cfg = o.config[unitId];
+      const part = createPart(o.assets.paks[name === "left" ? 0 : 1], G, this.vram,
+        { slot: idx, side: idx, mirrorPages: idx === 1, shadow: cfg.shadow });
       part.y = part.bset.y;
       part.x = 0;
       // Gốc toạ độ của ảnh gốc không nằm giữa thân (ngựa lệch tới ~20px): đo thế đứng chờ rồi bù để
       // tâm hình rơi đúng vị trí đứng của game, tránh một bên bị cắt mép màn hình.  (Chỉ chỉnh hiển thị.)
-      const nominal = o.x ? o.x[i] : (i === 0 ? -part.bset.x : part.bset.x);
-      part.x = nominal - this._idleCenter(part);
-      this.actors[n] = new Actor(this, part, n);
-    });
+      const nominal = o.x ? o.x[name === "left" ? 0 : 1] : (idx === 1 ? -part.bset.x : part.bset.x);
+      const shift = this._idleCenter(part);
+      part.x = nominal - shift;
+      this.actors[name] = new Actor(this, part, name);
+      this.actors[name].shift = shift;
+    }
 
     const key = o.key ?? "tearring-stage";
     if (scene.textures.exists(key)) scene.textures.remove(key);
@@ -201,7 +253,23 @@ export class TearRingStage {
     if (n) this.render();
   }
 
+  /**
+   * Nền điều biến theo tint của game (G.tint, 128 = nguyên bản): evt 0x40 của motion chí mạng chia đôi, evt 0x20 trả lại
+   * (BtlBgDraw 0x80109e0c đọc 0x80166df8).  Chỉ nền bị tối; sprite unit không dùng tint này.
+   */
+  _syncTint() {
+    const t = this.G.tint, key = t[0] + "," + t[1] + "," + t[2];
+    if (key === this._tintKey) return;
+    this._tintKey = key;
+    const b = this.backdropBase, out = new Uint8ClampedArray(b.length);
+    for (let i = 0; i < b.length; i += 4) {
+      out[i] = b[i] * t[0] / 128; out[i + 1] = b[i + 1] * t[1] / 128; out[i + 2] = b[i + 2] * t[2] / 128; out[i + 3] = 255;
+    }
+    this.backdrop = out;
+  }
+
   render() {
+    this._syncTint();
     const F = new Frame({ camX: 0, camY: 160 });          // cam_x/cam_y của BtlSetupLayout (cận chiến)
     for (const a of Object.values(this.actors)) if (a.visible) a.part.draw(F);
     const gpu = new Gpu(this.vram, { width: STAGE_W, height: STAGE_H, mode: "backdrop", backdrop: this.backdrop }).run(F);

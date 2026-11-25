@@ -77,3 +77,59 @@ Kiểm tra chéo: bóng đổ vẽ ở sy = cam_y - 10 = 150 và móng ngựa re
 Còn nhập nhằng: participant 0 có x = +100 (bên PHẢI màn hình) còn participant 1 bên trái; tức ảnh gốc thường quay sang TRÁI
 (BU052 đúng, BU004 quay phải) -- cờ flip_ac của part (+0xac) chắc do bộ điều phối đặt theo unit.
 Bộ điều phối chưa dịch chuyển unit trong motion (đường đi kênh 0 của M0_x/M1_x đều bằng 0): đoạn "phi tới" nằm trong code điều phối.
+
+## Bộ điều phối: các phát hiện (đọc từ mã máy; ĐÃ ÁP: thời điểm trúng đòn)
+- Danh sách motion mà điều phối bắt đầu qua `BtlMotionStart(part, n, x, y)` (y = -1 nghĩa là "gọi BtlPartPlace thay vì đặt vị trí"):
+  0 chờ, 1 phi tới, 2 (sau 50% quãng phi), 4 né, 7 và 10 và 8 (chưa rõ), 11/12 đòn đầu/đòn sau (11 + (bit0 của cờ lượt)),
+  19 chí mạng.  Khớp với vai trò mà BattleScene đang dùng.
+- **Thời điểm trúng đòn: BSET u16 +0x14 (M1_0), +0x16 (M1_1), +0x18 (M1_8)**, nạp vào bộ đếm ctx+0x21c lúc bắt đầu đòn.
+  Kiểm tra bằng hình: vệt chém / chớp phép xuất hiện đúng tick đó (BU016 39, BU027 16, BU051 41, BU212 11, BU004 108);
+  và với cả 27 unit trong kho giá trị đều nằm trong độ dài motion (tests/tearring.test.mjs).
+  Evt 0x01 trong motion chỉ là các nhát phụ (bản kỹ năng/phép).
+- Điều phối bật vệt ảnh cho đòn cận chiến: `BtlPartFx(part, 2 hoặc 3)` + `bset.flags0 |= 0x800` +
+  `bset.col24 = 0x00985050` (khi ctx+0xe4 != 0) hoặc `0x00709070` (ngược lại), điều kiện: bset.flags0 & 4, loại tầm đánh 0,
+  và hàm 0x80026ec8(lớp) == 0.   CHƯA áp.
+- Đoạn phi tới dạng cung (0x80100c20..0x80100ee0): điểm đầu = x - dấu*(w_A + w_B + 50) (w = bset+0x0a), y = bset+0x0c + 240;
+  điểm cuối = (-x_đối thủ ?, 240); đường Bezier 4 điểm (TmBezier) với tham số t chạy 0..32767, tốc độ = 32767 / (10 * bset[0x0f])
+  mỗi khung; qua 50% đổi sang M0_2; qua 75% giảm tốc 409/khung tới sàn 163; xong thì đặt trạng thái 3 và vị trí cuối.
+  Có nhiều nhánh phi tới khác theo loại tầm/chế độ -- mới đọc một nhánh, CHƯA áp.
+
+## Hướng nhìn (đã chốt bằng mã máy + hình)
+- `BtlLoadPages` 0x8014e034: lật trang texture khi `idx == 1`; `BtlFrameDraw` 0x800fe8e4: `side = (idx != 0)`.  Cờ lật `part+0xac`
+  chỉ được khởi tạo = 0 (0x8014e254), không có chỗ nào trong vùng điều phối trận thường ghi vào nó.
+- => hướng nhìn KHÔNG phụ thuộc unit.  Mọi ảnh gốc quay sang TRÁI: participant 0 đứng bên phải (x = +bset.x, không lật) nhìn trái,
+  participant 1 đứng bên trái (x = -bset.x, lật trang + side 1) nhìn phải.  Vệt chém/cung chém của mọi unit trong kho đều rơi về phía trước
+  mặt khi xếp theo quy ước này (đối chiếu bằng hình ghép 12 cặp).
+- Bảng `facing` ghi tay trước đây SAI với BU002 và bộ binh kiếm (khiến chúng quay lưng vào địch); đã bỏ.
+
+## 0x8010031c  máy trạng thái phi tới / ra đòn (767 lệnh; mới đọc cấu trúc, CHƯA port)
+Tham số: (ctl, ctx, ?, cờ).  Hướng: `fp = (ctx.byte[0x88] != 0) ? +1 : -1` (chỉ số bên tấn công; bên 0 đứng phải nên tiến về -x).
+Pha của unit = byte `part+0x0e`, nhảy theo bảng 22 mục ở 0x800f13b8:
+  pha 1 -> 0x80100534   | pha 2 -> 0x80100624 (có pha con ở ctx+0x27f: 0..3) | pha 3 -> 0x80100b3c
+  pha 4 -> 0x801007e4   | pha 8 -> 0x80100960 | pha 9 -> 0x80100ab8 | pha 20 -> 0x80100b94 | pha 21 -> 0x80100d0c (cung Bezier)
+  các pha còn lại (0,5,6,7,10..19) -> 0x80100424 (chỉ phát âm đòn rồi cộng tiến độ).
+Chuyển động nội suy bằng tiến độ t (ctx+0x27c, 0..32767) += tốc độ (ctx+0x270); vị trí = TmLerp (0x80059db8) hoặc TmBezier
+(0x80059a04) giữa điểm đầu (ctx+0x274, +0x276) và điểm cuối (ctx+0x278, +0x27a).
+Âm đòn (0x80035be8(id, 100, 100)): loại tầm 0 -> 39 hoặc 40 (flags_lớp & 4 -> 40); loại 1 -> 44 (+40 nếu flags & 4); loại 2 -> 41 hoặc 42 (flags & 0x80 -> 42).
+Còn lại cần: bản đồ pha -> loại đòn (cận chiến/phép/cung), nơi đặt tốc độ/điểm đầu/điểm cuối của từng pha.
+Hướng đi hợp lý nhất: chạy chính hàm này trong bộ giả lập MIPS (files/emu.py) với cấu trúc ctl/ctx dựng sẵn và ghi lại quỹ đạo part.x/y +
+các lần gọi BtlMotionStart, thay vì đọc hết 767 lệnh bằng mắt.
+
+## Cờ sự kiện và tint (đọc thêm; ĐÃ ÁP: tối nền khi chí mạng)
+- Hai cờ do `BtlChanStep` ghi: 0x8016687c = g_BtlHitFlag (evt 0x01), 0x80166884 = g_BtlEvtDelay (evt 0x10, giá trị = delay của bản ghi).
+  Điều phối đọc/xoá chúng qua 0x801517c4/0x801517d4 và 0x801517e4/0x801517f4.  Các hàm nhỏ khác ở 0x80151574 (GetPart = base + 200 + 264*i),
+  0x8015179c / 0x801517b0 (lưu / khôi phục vị trí part.x,y vào +0xe8,+0xea).
+- Trong dữ liệu motion, chỉ đòn chí mạng M1_8 có sự kiện: evt 0x01 + 0x40 ở tick ~2 (nền tối đi một nửa), evt 0x01 tại tick trúng thật,
+  evt 0x20 ở cuối (trả nền).  Các đòn thường M1_0 / M1_1 và M0_x không có sự kiện nào (BU016, BU027, BU051).
+- TintStep (0x80109a68) đưa tint hiện tại về đích 0x80166dfc (mặc định 0 trong ảnh B.BIN) với bước = BSET byte +0x10 (BU016: 1,
+  BU004: 2, BU052: 6), gọi ở các pha 0x80103908 / 0x801046ac / 0x801089ac.  Chưa biết khi nào đích khác 0 -> chưa áp.
+
+## 0x800ffeec  BtlApproachSetup + pha 1 của 0x8010031c  (ĐÃ ÁP vào stage.js: Actor.dash)
+- Khoảng trống = |xA - xB| - (wA + wB)/2 (w = BSET+0x0a = 64 ở mọi unit đã đọc), kẹp 0..640.  <= 0 thì khỏi phi (trạng thái 584).
+- Tốc độ: bset[0x0f] kẹp 1..20 (px/tick); px mỗi tick = khoảng trống / tốc độ (tối thiểu 1); mỗi tick tiến độ t += 32767 / (px mỗi tick);
+  tràn 32767 là tới nơi (BU016: b0f = 3, khoảng trống 136 -> 46 tick).  Điểm cuối = x + hướng*khoảng trống.
+- Vị trí = TmBezier(đầu, (x0+mid)/2, (x1+mid)/2, cuối) (điều khiển ở 1/4 và 3/4: hơi chậm hai đầu).  Mã gốc đặt điều khiển DỌC = 140 (hằng),
+  tức có thể có nhịp nhảy ~60px; CHƯA áp (chưa rõ pha này có dùng cho cận chiến thường không).
+- Có nhánh: nếu unit có M0_7 thì thay vì M0_1 chạy M0_7 với tốc độ 32767 / (5 * bset[0x0f]) cố định theo thời gian; pha 8 dùng M0_0, pha 3 dùng M0_10.
+- Kiểm tra bằng hình: ở khoảng cách tâm 64 cung chém của BU016/027/002 rơi đúng vào mặt đối thủ; ở 100 thì hụt => đúng quy tắc.
+- Cổng chờ: pha 1 chạy khi cờ delay (0x80166884, evt 0x10) bật HOẶC ctx+0x272 != 0 (= khoảng trống) -> cận chiến chạy ngay.

@@ -5,9 +5,6 @@ import { TearRingStage, STAGE_W, STAGE_H } from "../tearring/stage.js";
 import { TEARRING_UNITS, MOTION } from "../data/tearringUnits.js";
 
 // Toạ độ PSX (320 rộng) của hai bên và khoảng dừng khi bên tấn công áp sát.
-// Vị trí đứng ban đầu lấy từ dữ liệu của game (bset.x = ±100, xem stage.js).  CLOSE_GAP là khoảng
-// dừng khi áp sát: số tự chọn (game dịch chuyển unit trong bộ điều phối, chưa decomp).
-const CLOSE_GAP = 130;
 
 // Sân khấu 320x160 hiển thị phóng 1.2 lần trong khung 384x384.
 const STAGE_SCALE = 1.2;
@@ -147,15 +144,9 @@ export class BattleScene extends Phaser.Scene {
     const atk = from.unit, def = to.unit;
     const toRight = A === this.left;
 
-    // Phi tới sát đối thủ (chỉ lần đầu), rồi đứng yên tại chỗ.
+    // Phi tới sát đối thủ (chỉ lần đầu) theo công thức của game: dừng khi hai "hộp" (BSET+0x0a) chạm nhau.
     if (from.approaches) {
-      const targetX = D.part.x + (toRight ? -CLOSE_GAP : CLOSE_GAP);
-      if (A.has(MOTION.move)) A.loop(MOTION.move);
-      await new Promise(resolve => this.tweens.add({
-        targets: A.part, x: targetX,
-        duration: Math.max(260, Math.abs(targetX - A.part.x) * 4),
-        ease: "Quad.easeOut", onComplete: resolve, onStop: resolve
-      }));
+      await A.dash(D);
       from.approaches = false;
     }
 
