@@ -9,7 +9,7 @@
  * Phần ĐIỀU PHỐI (chọn motion nào, lúc nào) nằm trong B.BIN nhưng chưa decomp -> do scene quyết định.
  */
 import { createGlobals, createPart, Frame, Gpu, Vram } from "./unit.js";
-import { tmBezier } from "./path.js";
+import { tmLerp } from "./path.js";
 
 export const STAGE_W = 320, STAGE_H = 160;
 export const PS1_TICK_MS = 1000 / 60;
@@ -52,8 +52,10 @@ class Actor {
    * Phi tới sát đối thủ - công thức của BtlApproachSetup 0x800ffeec + pha 1 của 0x8010031c (0x80100534):
    *   khoảng trống = |xA - xB| - (wA + wB)/2   (w = BSET+0x0a; 0 ... 640)   => dừng khi hai "hộp" chạm nhau
    *   tốc độ = bset[0x0f] (1..20) px/tick;  mỗi tick tiến độ t += 32767 / (khoảng trống / tốc độ)
-   *   vị trí = Bezier 4 điểm (điều khiển ở 1/4 và 3/4 đoạn) giữa vị trí đầu và cuối.
-   * Chỉ trục ngang được áp (điểm điều khiển dọc của game chưa rõ nghĩa).  Trả Promise khi tới nơi.
+   *   vị trí = TmLerp (nội suy TUYẾN TÍNH) giữa vị trí đầu và cuối, đúng nhánh "loại đòn 0" (BSET+0x0e == 0) của bộ điều phối
+   *   0x8010031c: tiến độ t += ctx+0x270 mỗi tick, tràn 32767 là xong, rồi TmLerp(ctx+0x274 -> ctx+0x278, t) (0x80100500/0x80100944).
+   *   (Bézier chỉ dùng ở loại đòn 1, và cung ở loại 21; mọi unit trong kho kỵ binh/bộ binh hiện có đều là loại 0.)
+   * Chỉ trục ngang được áp (y đầu = y cuối).  Trả Promise khi tới nơi.
    */
   dash(target, { motion = 1 } = {}) {
     const p = this.part, wsum = p.bset.w0a + target.part.bset.w0a;
@@ -64,7 +66,7 @@ class Actor {
     const perTick = Math.max(1, Math.trunc(gap / spd));
     const x0 = Math.round(this.gx), dir = target.gx >= this.gx ? 1 : -1, x1 = x0 + dir * gap;
     if (this.has(motion)) this.loop(motion);
-    return new Promise(resolve => { this.dashing = { x0, x1, speed: Math.trunc(32767 / perTick), t: 0, resolve }; });
+    return new Promise(resolve => { this.dashing = { x0, x1, speed: Math.trunc(32767 / perTick), t: 0, resolve, target }; });
   }
 
   _dashStep() {
@@ -73,11 +75,12 @@ class Actor {
     d.t += d.speed;
     let done = false;
     if (d.t > 32767) { d.t = 32767; done = true; }
-    if (done) { this.gx = d.x1; this.dashing = null; d.resolve(); return; }
-    const mid = Math.trunc((d.x0 + d.x1) / 2);
-    const P = (x, y = 0) => ({ x, y }), out = { x: 0, y: 0 };
-    tmBezier(out, P(d.x0), P(Math.trunc((d.x0 + mid) / 2)), P(Math.trunc((d.x1 + mid) / 2)), P(d.x1), d.t);
+    if (done) { const b = this.gx; this.gx = d.x1; this.stage.followCamera(d.target, this.gx - b); this.dashing = null; d.resolve(); return; }
+    const out = { x: 0, y: 0 };
+    tmLerp(out, { x: d.x0, y: 0 }, { x: d.x1, y: 0 }, d.t);
+    const before = this.gx;
     this.gx = out.x;
+    this.stage.followCamera(d.target, this.gx - before);
   }
 
   /**
@@ -191,6 +194,7 @@ export class TearRingStage {
     this.backdropBase = buildBackdrop({ sky: 0x263b55, line: 0x8c9a9e, ground: 0x182337, horizon: 128, ...(o.backdrop || {}) });
     this.backdrop = this.backdropBase;
     this._tintKey = "128,128,128";
+    this.camX = 0; this.camY = 160;      // ctx+0xac / +0xae (BtlSetupLayout: cận chiến mặc định = 0 / 160)
 
     // Cơ chế của game (BtlLoadPages 0x8014e034 + BtlFrameDraw 0x800fe8e4): hướng nhìn KHÔNG phụ thuộc unit.
     //   participant 0: trang texture nguyên bản, side = 0, đứng x = +bset.x  (bên PHẢI màn hình, ảnh gốc nhìn TRÁI)
@@ -270,11 +274,24 @@ export class TearRingStage {
 
   render() {
     this._syncTint();
-    const F = new Frame({ camX: 0, camY: 160 });          // cam_x/cam_y của BtlSetupLayout (cận chiến)
+    const F = new Frame({ camX: this.camX, camY: this.camY });   // cam_x/cam_y: BtlSetupLayout + camera đi theo khi phi tới
     for (const a of Object.values(this.actors)) if (a.visible) a.part.draw(F);
     const gpu = new Gpu(this.vram, { width: STAGE_W, height: STAGE_H, mode: "backdrop", backdrop: this.backdrop }).run(F);
     this.ctx.putImageData(new ImageData(gpu.canvas.px, STAGE_W, STAGE_H), 0, 0);
     this.tex.refresh();
+  }
+
+  /**
+   * Camera đi theo bên phi tới - BtlApproach 0x801091d4(ctx, bên bị đánh, dx, dy), gọi mỗi tick phi:
+   *   w = bset+0x0a của bên bị đánh + 40; sx = vị trí màn hình của bên bị đánh (sx = x - (cam_x - 160));
+   *   nếu sx < w hoặc sx > 320 - w thì cam_x += dx (kẹp ±160).  Bố cục cận chiến: bên bị đánh luôn ở sx 60/260 nên camera luôn bám.
+   * Sau khi phi xong camera đứng nguyên (hai bên cũng đứng tại chỗ sau đòn).  Trục dọc không đổi (dy = 0).
+   */
+  followCamera(target, dx) {
+    if (!dx) return;
+    const w = target.part.bset.w0a + 40;
+    const sx = target.gx - (this.camX - 160);
+    if (sx < w || sx > STAGE_W - w) this.camX = Math.max(-160, Math.min(160, this.camX + dx));
   }
 
   /** Dừng hình (hit-stop). */

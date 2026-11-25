@@ -15,6 +15,9 @@
 `export_anim.py` (chạy mã máy MIPS gốc của B.BIN). Kết quả hiện tại: **toàn bộ motion của BU004,
 BU030, BU052 (31 lượt, hàng nghìn tick) khớp 100% từng byte**, kể cả đường vẽ bóng đổ.
 
+## Ghi chú phiên 2
+- Đường phi tới của loại đòn 0 là `TmLerp` tuyến tính (đã sửa trong `stage.js`); camera đi theo + bản đồ trạng thái điều phối: xem `HANDOFF.md` mục 7.5.
+
 ## Chưa có (không nằm trong phần đã decomp) -> đều có hook trong `unit.js`
 - `BtlPartPlace` 0x80151a4c (đã đọc: `BtlPathEval` kênh 0 rồi x ±= path.x, y += path.y; chưa port) và 0x801515e4.
 - Nơi TIÊU THỤ kết quả sự kiện: `0x801099a4` và `0x80109e0c` (đọc `tint` và cờ 0x80163e00). Chưa decomp.
