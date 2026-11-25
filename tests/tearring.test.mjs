@@ -70,7 +70,7 @@ await test("token map dựng được cho mọi unit", () => {
   assert.equal(tokens.size, Object.keys(TEARRING_UNITS).length);
   for (const t of tokens.values()) assert.ok(t.w > 10 && t.h > 10);
   const t = tokens.get("BU016");
-  assert.equal(t.flipFor("left"), true);    // ảnh gốc nhìn trái, bên người chơi cần nhìn phải
+  assert.equal(t.flipFor("left"), true);    // ảnh gốc nhìn trái: bên trái màn đánh cần lật để nhìn phải
   assert.equal(t.flipFor("right"), false);
 });
 
@@ -84,10 +84,51 @@ await test("stage: đòn đánh có sự kiện trúng/kết thúc, biến mất
   h.hit.then(() => (hit = true)); h.done.then(() => (done = true));
   step(120); await Promise.resolve();
   assert.ok(hit && done, "đòn đánh phải trúng và kết thúc");
+  assert.equal(stage.actors.left.part.bset.dv.getUint16(0x14, true) > 0, true);
   let dead = false;
   stage.actors.right.die().then(() => (dead = true));
   step(100); await Promise.resolve();
   assert.ok(dead && stage.actors.right.visible === false);
+});
+
+await test("thời điểm trúng đòn lấy từ BSET (M1_0 = +0x14) và nằm trong độ dài motion", () => {
+  const G = createGlobals(common, rsincos);
+  for (const id of Object.keys(TEARRING_UNITS)) {
+    const part = createPart(pak(id), G, new Vram(), { slot: 0 });
+    for (const [m, off] of [[11, 0x14], [12, 0x16], [19, 0x18]]) {
+      if (!part.motion[m]) continue;
+      const hit = part.bset.dv.getUint16(off, true);
+      assert.ok(hit > 0 && hit <= part.motion[m].length + 1, `${id} motion ${m}: hit ${hit} / dài ${part.motion[m].length}`);
+    }
+  }
+});
+
+await test("đòn chí mạng làm tối nền (evt 0x40) rồi trả lại (evt 0x20)", () => {
+  const scene = fakeScene();
+  const stage = new TearRingStage(scene, { assets: { common, rsincos, paks: [pak("BU016"), pak("BU051")] }, units: ["BU016", "BU051"], config: TEARRING_UNITS });
+  const step = n => { for (let i = 0; i < n; i++) scene.listeners.u(0, stage.tickMs + 0.001); };
+  stage.actors.left.play(MOTION.crit);
+  step(10);
+  assert.equal(stage.G.tint[0], 64, "nền phải tối còn một nửa");
+  assert.ok(stage.backdrop[0] < stage.backdropBase[0]);
+  step(80);
+  assert.equal(stage.G.tint[0], 128, "hết đòn thì nền trở lại");
+  assert.equal(stage.backdrop[0], stage.backdropBase[0]);
+});
+
+await test("phi tới dừng đúng khi hai hộp chạm nhau (khoảng cách tâm = (wA + wB)/2)", async () => {
+  const scene = fakeScene();
+  const stage = new TearRingStage(scene, { assets: { common, rsincos, paks: [pak("BU016"), pak("BU051")] }, units: ["BU016", "BU051"], config: TEARRING_UNITS });
+  const step = n => { for (let i = 0; i < n; i++) scene.listeners.u(0, stage.tickMs + 0.001); };
+  const L = stage.actors.left, R = stage.actors.right;
+  assert.equal(Math.round(R.gx - L.gx), 200);
+  let arrived = false;
+  L.dash(R).then(() => (arrived = true));
+  let ticks = 0;
+  while (!arrived && ticks < 400) { step(1); await Promise.resolve(); ticks++; }
+  assert.ok(arrived, "phải tới nơi");
+  assert.equal(Math.round(R.gx - L.gx), 64);
+  assert.ok(ticks > 10 && ticks < 100, "thời gian phi hợp lý: " + ticks);
 });
 
 console.log(`\n${passed} test đạt.`);
